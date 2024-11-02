@@ -61,8 +61,7 @@ int main() {
 	char buffer[BUFFER_SIZE];
 	memset(buffer, '\0', BUFFER_SIZE);
 
-	while(read(client_fd, buffer , BUFFER_SIZE) != 0) {
-		// printf("buffer: %s, length: %d\n", buffer, received_length);
+	while(read(client_fd, buffer , 1) != 0) {
 		write(client_fd, "+PONG\r\n", strlen("+PONG\r\n"));
 	}
 
