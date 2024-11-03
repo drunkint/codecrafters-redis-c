@@ -6,8 +6,24 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #define BUFFER_SIZE 1024
+
+void* handle_client(void* client_fd_pointer) {
+	int client_fd = (int)(*(int*)client_fd_pointer);
+	char buffer[BUFFER_SIZE];
+	memset(buffer, '\0', BUFFER_SIZE);
+
+	while(read(client_fd, buffer , BUFFER_SIZE) > 0) {
+		write(client_fd, "+PONG\r\n", strlen("+PONG\r\n"));
+		memset(buffer, '\0', BUFFER_SIZE);
+	}
+
+	printf("Client disconnected\n");
+	close(client_fd);  // Close the client connection
+	return NULL;
+}
 
 int main() {
 	// Disable output buffering
@@ -55,16 +71,24 @@ int main() {
 	printf("Waiting for a client to connect...\n");
 	client_addr_len = sizeof(client_addr);
 
-	int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
-	printf("Client connected\n");
+	while (1) {
+		int *client_fd = malloc(sizeof(int)); // Dynamic allocation for the client file descriptor
+		*client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+		printf("Client connected\n");
 
-	char buffer[BUFFER_SIZE];
-	memset(buffer, '\0', BUFFER_SIZE);
+		pthread_t t;
+		int thread_result = pthread_create(&t, NULL, handle_client, client_fd) != 0;
+		if (thread_result != 0) {
+			fprintf(stderr, "Failed to create thread: %s\n", strerror(thread_result));
+			close(*client_fd);
+			free(client_fd);
+			continue;
+		}
 
-	while(read(client_fd, buffer , BUFFER_SIZE) != 0) {
-		printf("buffer: %s\n", buffer);
-		write(client_fd, "+PONG\r\n", strlen("+PONG\r\n"));
+		pthread_detach(t);
 	}
+	
+	
 
 	close(server_fd);
 
