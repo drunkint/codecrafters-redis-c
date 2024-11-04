@@ -7,8 +7,87 @@
 #include <errno.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <stdbool.h>
+#include <ctype.h>
 
 #define BUFFER_SIZE 1024
+#define MAX_ARGUMENT_LENGTH 128
+#define MAX_NUM_ARGUMENTS 16
+
+bool is_digit(char character) {
+	return '0' <= character && character <= '9';
+}
+
+void modify_to_lower(char* str) {
+	for(int i = 0; i < strlen(str); i++){
+		str[i] = tolower(str[i]);
+	}
+}
+
+// str has max size BUFFER_SIZE
+// bulk strings are encoded as: $<length>\r\n<data>\r\n
+void get_bulk_string(char* dest, char* src) {
+	int length = strlen(src);
+	sprintf(dest, "$%d\r\n%s\r\n", length, src);
+}
+
+// simple strings are encoded as: +<data>\r\n
+void get_simple_string(char* dest, char* src) {
+	sprintf(dest, "+%s\r\n", src);
+}
+
+// command is a RESP array of bulk strings
+// RESP array are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
+// bulk strings are encoded as: $<length>\r\n<data>\r\n
+int parse_command_from_client(char* result, char* command) {
+	if (!(strlen(command) >= 2 && command[0] == '*' && is_digit(command[1]))) {
+		printf("what is this: %c\n", command[0]);
+		printf("invalid RESP array: %s\n", command);
+		return 1;
+	}
+	command += 1; // skip the *
+	int resp_array_length = atoi(command);
+
+	// decoded_command[0] is the command name. The rest are its arguments.d
+	char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH];
+	memset(decoded_command, '\0', MAX_NUM_ARGUMENTS * MAX_ARGUMENT_LENGTH);
+	
+	char* cur = strchr(command, '\n') + 1;
+	for (int i = 0; i < resp_array_length; i++) {
+		if (cur[0] != '$') {
+			printf("invalid RESP array: %s, reason: bulk string encoding does not start with $", command, cur[0]);
+			return 1;
+		}
+		cur++;
+
+		if (!is_digit(cur[0])) {
+			printf("invalid RESP array: %s, reason: %s is not a digit", command, cur[0]);
+			return 1;
+		}
+
+		int elem_length = atoi(cur);
+		cur = strchr(cur, '\n') + 1;
+
+		strncpy(decoded_command[i], cur, elem_length);
+		printf("decoded_command[%d]: %s\n", i, decoded_command[i]);
+
+		cur = strchr(cur, '\n') + 1; // skip <data>\r\n
+	}
+
+	modify_to_lower(decoded_command[0]);
+	// printf("decoded_command[0]: %s\n", decoded_command[0]);
+	if (strcmp(decoded_command[0], "ping") == 0) {
+		get_simple_string(result, "PONG");
+		return 0;
+	} else if (strcmp(decoded_command[0], "echo") == 0) {
+		get_bulk_string(result, decoded_command[1]);
+		return 0;
+	} else {
+		strcpy(result, "+NotImplemented\r\n");
+		return 0;
+	}
+
+}
 
 void* handle_client(void* client_fd_pointer) {
 	int client_fd = (int)(*(int*)client_fd_pointer);
@@ -16,14 +95,20 @@ void* handle_client(void* client_fd_pointer) {
 	memset(buffer, '\0', BUFFER_SIZE);
 
 	while(read(client_fd, buffer , BUFFER_SIZE) > 0) {
-		write(client_fd, "+PONG\r\n", strlen("+PONG\r\n"));
+		char result[BUFFER_SIZE];
+		parse_command_from_client(result, buffer);
+
+		write(client_fd, result, strlen(result));
 		memset(buffer, '\0', BUFFER_SIZE);
 	}
 
 	printf("Client disconnected\n");
 	close(client_fd);  // Close the client connection
+	free(client_fd_pointer);
 	return NULL;
 }
+
+
 
 int main() {
 	// Disable output buffering
