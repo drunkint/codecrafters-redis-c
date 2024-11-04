@@ -9,10 +9,13 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include "hash.h"
 
 #define BUFFER_SIZE 1024
-#define MAX_ARGUMENT_LENGTH 128
-#define MAX_NUM_ARGUMENTS 16
+#define MAX_ARGUMENT_LENGTH 256
+#define MAX_NUM_ARGUMENTS 8
+
+HashEntry hashtable[HASH_NUM];
 
 bool is_digit(char character) {
 	return '0' <= character && character <= '9';
@@ -27,6 +30,11 @@ void modify_to_lower(char* str) {
 // str has max size BUFFER_SIZE
 // bulk strings are encoded as: $<length>\r\n<data>\r\n
 void get_bulk_string(char* dest, char* src) {
+	if (src == NULL) {
+		strcpy(dest, "$-1\r\n");
+		return;
+	}
+
 	int length = strlen(src);
 	sprintf(dest, "$%d\r\n%s\r\n", length, src);
 }
@@ -34,6 +42,22 @@ void get_bulk_string(char* dest, char* src) {
 // simple strings are encoded as: +<data>\r\n
 void get_simple_string(char* dest, char* src) {
 	sprintf(dest, "+%s\r\n", src);
+}
+
+bool handle_set(char* result, char* key, char* value) {
+	if (!hashtable_set(hashtable, key, value)) {
+		get_simple_string(result, "ERROR-SET");
+		return false;
+	}
+
+	get_simple_string(result, "OK");
+	return true;
+}
+
+bool handle_get(char* result, char* key) {
+	char* value = hashtable_get(hashtable, key);
+	get_bulk_string(result, value);
+	return true;
 }
 
 // command is a RESP array of bulk strings
@@ -81,6 +105,12 @@ int parse_command_from_client(char* result, char* command) {
 		return 0;
 	} else if (strcmp(decoded_command[0], "echo") == 0) {
 		get_bulk_string(result, decoded_command[1]);
+		return 0;
+	} else if (strcmp(decoded_command[0], "set") == 0) {
+		handle_set(result, decoded_command[1], decoded_command[2]);
+		return 0;
+	} else if (strcmp(decoded_command[0], "get") == 0) {
+		handle_get(result, decoded_command[1]);
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
@@ -152,6 +182,8 @@ int main() {
 		printf("Listen failed: %s \n", strerror(errno));
 		return 1;
 	}
+
+	hashtable_init(hashtable);
 	
 	printf("Waiting for a client to connect...\n");
 	client_addr_len = sizeof(client_addr);
