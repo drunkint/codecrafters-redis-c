@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include "hash.h"
+#include "timer.h"
 
 #define BUFFER_SIZE 1024
 #define MAX_ARGUMENT_LENGTH 256
@@ -44,11 +45,20 @@ void get_simple_string(char* dest, char* src) {
 	sprintf(dest, "+%s\r\n", src);
 }
 
-bool handle_set(char* result, char* key, char* value) {
-	if (!hashtable_set(hashtable, key, value)) {
+bool handle_set(char* result, char* key, char* value, char* flag, char* arg) {
+	long expiry_time = -1;
+	if (strcmp(flag, "px") == 0) {
+		expiry_time = (long)atoi(arg) + get_time_in_ms();
+	}
+
+	printf("in handle set, expiry_time is: %d\n", expiry_time);
+
+	if (!hashtable_set(hashtable, key, value, expiry_time)) {
 		get_simple_string(result, "ERROR-SET");
 		return false;
 	}
+
+	hashtable_print(hashtable);
 
 	get_simple_string(result, "OK");
 	return true;
@@ -93,12 +103,15 @@ int parse_command_from_client(char* result, char* command) {
 		cur = strchr(cur, '\n') + 1;
 
 		strncpy(decoded_command[i], cur, elem_length);
+
+		if (!is_digit(decoded_command[i][0])) {
+			modify_to_lower(decoded_command[i]);
+		}
 		printf("decoded_command[%d]: %s\n", i, decoded_command[i]);
 
 		cur = strchr(cur, '\n') + 1; // skip <data>\r\n
 	}
 
-	modify_to_lower(decoded_command[0]);
 	// printf("decoded_command[0]: %s\n", decoded_command[0]);
 	if (strcmp(decoded_command[0], "ping") == 0) {
 		get_simple_string(result, "PONG");
@@ -107,7 +120,7 @@ int parse_command_from_client(char* result, char* command) {
 		get_bulk_string(result, decoded_command[1]);
 		return 0;
 	} else if (strcmp(decoded_command[0], "set") == 0) {
-		handle_set(result, decoded_command[1], decoded_command[2]);
+		handle_set(result, decoded_command[1], decoded_command[2], decoded_command[3], decoded_command[4]);
 		return 0;
 	} else if (strcmp(decoded_command[0], "get") == 0) {
 		handle_get(result, decoded_command[1]);
