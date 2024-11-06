@@ -247,7 +247,7 @@ int main() {
 					fds[i].fd = -1; 
 					memset(results[i], '\0', BUFFER_SIZE);
 				} else {
-					parse_command_from_client(result, buffer);	
+					parse_command_from_client(result, buffer);
 					strcpy(results[i], result);
 					fds[i].events |= POLLOUT;
 				}
