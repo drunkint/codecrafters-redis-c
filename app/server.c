@@ -6,17 +6,31 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
-#include <pthread.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <poll.h>
 #include "hash.h"
 #include "timer.h"
 
 #define BUFFER_SIZE 1024
 #define MAX_ARGUMENT_LENGTH 256
 #define MAX_NUM_ARGUMENTS 8
+#define MAX_NUM_FDS 10
 
 HashEntry hashtable[HASH_NUM];
+struct pollfd fds[MAX_NUM_FDS];
+
+
+bool add_to_fds(int fd) {
+	for (int i = 1; i < MAX_NUM_FDS; i++) {
+		if (fds[i].fd == -1) {
+			fds[i].fd = fd;
+			fds[i].events = POLLIN;
+			return true;
+		}
+	}
+	return false;
+}
 
 bool is_digit(char character) {
 	return '0' <= character && character <= '9';
@@ -132,27 +146,6 @@ int parse_command_from_client(char* result, char* command) {
 
 }
 
-void* handle_client(void* client_fd_pointer) {
-	int client_fd = (int)(*(int*)client_fd_pointer);
-	char buffer[BUFFER_SIZE];
-	memset(buffer, '\0', BUFFER_SIZE);
-
-	while(read(client_fd, buffer , BUFFER_SIZE) > 0) {
-		char result[BUFFER_SIZE];
-		parse_command_from_client(result, buffer);
-
-		write(client_fd, result, strlen(result));
-		memset(buffer, '\0', BUFFER_SIZE);
-	}
-
-	printf("Client disconnected\n");
-	close(client_fd);  // Close the client connection
-	free(client_fd_pointer);
-	return NULL;
-}
-
-
-
 int main() {
 	// Disable output buffering
 	setbuf(stdout, NULL);
@@ -197,30 +190,68 @@ int main() {
 	}
 
 	hashtable_init(hashtable);
+
+	// start of event loop
+	printf("Waiting for clients to connect...\n");
 	
-	printf("Waiting for a client to connect...\n");
-	client_addr_len = sizeof(client_addr);
+	// init first fd to be the server fd
+	fds[0].fd = server_fd;
+	fds[0].events = POLLIN;
 
-	while (1) {
-		int *client_fd = malloc(sizeof(int)); // Dynamic allocation for the client file descriptor
-		*client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
-		printf("Client connected\n");
+	// init the remaining fds (these will be filled with client fds later) 
+	for (int i = 1; i < MAX_NUM_FDS; i++) {
+		fds[i].fd = -1;
+	}
 
-		pthread_t t;
-		int thread_result = pthread_create(&t, NULL, handle_client, client_fd) != 0;
-		if (thread_result != 0) {
-			fprintf(stderr, "Failed to create thread: %s\n", strerror(thread_result));
-			close(*client_fd);
-			free(client_fd);
-			continue;
+	while(1) {
+		// poll() is the only blocking line of code 
+		int num_of_fds_with_event = poll(fds, MAX_NUM_FDS, -1);
+		// printf("num_of_fds_with_event: %d\n", num_of_fds_with_event);
+
+		if (num_of_fds_with_event < 0) {
+			printf("Poll failed: %s \n", strerror(errno));
+			return 1;
 		}
 
-		pthread_detach(t);
+		// checks if there's a new connection request
+		if (fds[0].revents & POLLIN) {
+			// printf("New Connection request!\n");
+			
+			// this line doesn't block because there are incoming data
+			int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+			printf("Accepted connection request from fd: %d\n", client_fd);
+
+			if (!add_to_fds(client_fd)) {
+				printf("Too many fds: %s \n", strerror(errno));
+				return 1;
+			}
+		}
+
+		// handle each client
+		for (int i = 1; i < MAX_NUM_FDS; i++) {
+			// if POLLIN is included in fds[i].revents (& is bitwise and)
+			// Note: fds[i].revents is populated by poll()
+			if (fds[i].fd != -1 && (fds[i].revents & POLLIN)) { 
+				char buffer[BUFFER_SIZE], result[BUFFER_SIZE];
+				memset(buffer, '\0', BUFFER_SIZE);
+				memset(result, '\0', BUFFER_SIZE);				
+
+				ssize_t read_length = read(fds[i].fd, buffer , BUFFER_SIZE);
+				
+				if (read_length <= 0) {
+					printf("Client disconnected\n");
+					close(fds[i].fd);
+					fds[i].fd = -1;
+				} else {
+					parse_command_from_client(result, buffer);
+					write(fds[i].fd, result, strlen(result));
+				}
+			}
+		}
 	}
 	
-	
-
 	close(server_fd);
 
 	return 0;
 }
+
