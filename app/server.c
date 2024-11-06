@@ -241,7 +241,7 @@ int main() {
 				if (read_length <= 0) {
 					printf("Client disconnected\n");
 					close(fds[i].fd);
-					fds[i].fd = -1;
+					fds[i].fd = -1; 
 				} else {
 					parse_command_from_client(result, buffer);
 					write(fds[i].fd, result, strlen(result));
