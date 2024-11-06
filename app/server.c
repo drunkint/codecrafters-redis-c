@@ -249,7 +249,7 @@ int main() {
 				} else {
 					parse_command_from_client(result, buffer);
 					strcpy(results[i], result);
-					fds[i].events |= POLLOUT;
+					fds[i].events |= POLLOUT; 
 				}
 			}
 
