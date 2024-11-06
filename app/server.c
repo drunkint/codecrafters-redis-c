@@ -19,6 +19,7 @@
 
 HashEntry hashtable[HASH_NUM];
 struct pollfd fds[MAX_NUM_FDS];
+char results[MAX_NUM_FDS][BUFFER_SIZE];
 
 
 bool add_to_fds(int fd) {
@@ -236,18 +237,28 @@ int main() {
 				memset(buffer, '\0', BUFFER_SIZE);
 				memset(result, '\0', BUFFER_SIZE);				
 
+				// this is not blocking because fds[i].revents includes POLLIN in poll()
+				// this means there are data to read in the client fd
 				ssize_t read_length = read(fds[i].fd, buffer , BUFFER_SIZE);
 				
 				if (read_length <= 0) {
 					printf("Client disconnected\n");
 					close(fds[i].fd);
 					fds[i].fd = -1; 
+					memset(results[i], '\0', BUFFER_SIZE);
 				} else {
-					parse_command_from_client(result, buffer);
-					write(fds[i].fd, result, strlen(result));
+					parse_command_from_client(result, buffer);	
+					strcpy(results[i], result);
+					fds[i].events |= POLLOUT;
 				}
 			}
+
+			// if POLLOUT is included in fds[i].revents (& is bitwise and)
+			if (fds[i].fd != -1 && (fds[i].revents & POLLOUT)) {
+				write(fds[i].fd, results[i], strlen(results[i]));
+			}
 		}
+
 	}
 	
 	close(server_fd);
