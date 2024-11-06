@@ -254,8 +254,9 @@ int main() {
 			}
 
 			// if POLLOUT is included in fds[i].revents (& is bitwise and)
-			if (fds[i].fd != -1 && (fds[i].revents & POLLOUT)) {
+			if (fds[i].fd != -1 && (fds[i].revents & POLLOUT) && strlen(results[i]) > 0) {
 				write(fds[i].fd, results[i], strlen(results[i]));
+				memset(results[i], '\0', BUFFER_SIZE);
 			}
 		}
 
