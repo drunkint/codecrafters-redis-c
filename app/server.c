@@ -17,9 +17,13 @@
 #define MAX_NUM_ARGUMENTS 8
 #define MAX_NUM_FDS 10
 
+// system wide variables
 HashEntry hashtable[HASH_NUM];
 struct pollfd fds[MAX_NUM_FDS];
 char results[MAX_NUM_FDS][BUFFER_SIZE];
+
+char dir[MAX_ARGUMENT_LENGTH] = {0};
+char db_filename[MAX_ARGUMENT_LENGTH] = {0};
 
 
 bool add_to_fds(int fd) {
@@ -60,6 +64,38 @@ void get_simple_string(char* dest, char* src) {
 	sprintf(dest, "+%s\r\n", src);
 }
 
+// RESP arrays are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
+// Assumption: each element in src is encoded
+void get_resp_array(char* dest, char src[][MAX_ARGUMENT_LENGTH], int number_of_elements) {
+	char consecutive_elements[BUFFER_SIZE];
+	memset(consecutive_elements, '\0', BUFFER_SIZE);
+	printf("resp start\n");
+	for (int i = 0; i < number_of_elements; i++) {
+		// printf("concatanating %s to %s\n", src[i], consecutive_elements);
+		strcat(consecutive_elements, src[i]);
+		// printf("-- resulting in %s\n", consecutive_elements);
+
+	}
+	sprintf(dest, "*%d\r\n%s", number_of_elements, consecutive_elements);
+}
+
+bool handle_arguments(int argc, char* argv[]) {
+	for (int i = 0; i < argc; i++) {
+		if (strncmp(argv[i], "--", 2) == 0) {
+			char* option_name = argv[i] + 2; // skip the --
+
+			if (strcmp(option_name, "dir") == 0) {
+				i++;
+				strcpy(dir, argv[i]);
+			} else if (strcmp(option_name, "dbfilename") == 0) {
+				i++;
+				strcpy(db_filename, argv[i]);
+			}
+		}
+		// printf("argv[%d]: %s\n", i, argv[i]);
+	}
+}
+
 bool handle_set(char* result, char* key, char* value, char* flag, char* arg) {
 	long expiry_time = -1;
 	if (strcmp(flag, "px") == 0) {
@@ -82,6 +118,23 @@ bool handle_set(char* result, char* key, char* value, char* flag, char* arg) {
 bool handle_get(char* result, char* key) {
 	char* value = hashtable_get(hashtable, key);
 	get_bulk_string(result, value);
+	return true;
+}
+
+bool handle_config_get(char* result, char* raw_name) {
+	char name[MAX_ARGUMENT_LENGTH];
+	char value[MAX_ARGUMENT_LENGTH];
+	get_bulk_string(name, raw_name);
+	if (strcmp(raw_name, "dir") == 0) {
+		get_bulk_string(value, dir);
+	} else if (strcmp(raw_name, "dbfilename") == 0) {
+		get_bulk_string(value, db_filename);
+	}
+
+	char raw_result[2][MAX_ARGUMENT_LENGTH];
+	strcpy(raw_result[0], name);
+	strcpy(raw_result[1], value);
+	get_resp_array(result, raw_result, 2);
 	return true;
 }
 
@@ -140,6 +193,9 @@ int parse_command_from_client(char* result, char* command) {
 	} else if (strcmp(decoded_command[0], "get") == 0) {
 		handle_get(result, decoded_command[1]);
 		return 0;
+	} else if (strcmp(decoded_command[0], "config") == 0 && strcmp(decoded_command[1], "get") == 0) {
+		handle_config_get(result, decoded_command[2]);
+		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
 		return 0;
@@ -147,7 +203,7 @@ int parse_command_from_client(char* result, char* command) {
 
 }
 
-int main() {
+int main(int argc, char *argv[]) {
 	// Disable output buffering
 	setbuf(stdout, NULL);
 	setbuf(stderr, NULL);
@@ -155,7 +211,7 @@ int main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	printf("Logs from your program will appear here!\n");
 
-	// Uncomment this block to pass the first stage
+	handle_arguments(argc, argv);
 	
 	int server_fd, client_addr_len;
 	struct sockaddr_in client_addr;
@@ -254,6 +310,7 @@ int main() {
 			}
 
 			// if POLLOUT is included in fds[i].revents (& is bitwise and)
+			// this is not blocking because fds[i].revents include POLLOUT in poll()
 			if (fds[i].fd != -1 && (fds[i].revents & POLLOUT) && strlen(results[i]) > 0) {
 				write(fds[i].fd, results[i], strlen(results[i]));
 				memset(results[i], '\0', BUFFER_SIZE);
