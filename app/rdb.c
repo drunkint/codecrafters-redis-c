@@ -112,14 +112,14 @@ unsigned long decode_timestamp_milliseconds(unsigned char* src) {
     printf("%lu", (unsigned long)src[i]);
   }
   printf("\n");
-  unsigned long result = ((unsigned long) src[0] << 56)
-                        + ((unsigned long) src[1] << 48)
-                        + ((unsigned long) src[2] << 40)
-                        + ((unsigned long) src[3] << 32)
-                        + ((unsigned long) src[4] << 24)
-                        + ((unsigned long) src[5] << 16)
-                        + ((unsigned long) src[6] << 8)
-                        + ((unsigned long) src[7]);
+  unsigned long result = ((unsigned long) src[7] << 56)
+                        + ((unsigned long) src[6] << 48)
+                        + ((unsigned long) src[5] << 40)
+                        + ((unsigned long) src[4] << 32)
+                        + ((unsigned long) src[3] << 24)
+                        + ((unsigned long) src[2] << 16)
+                        + ((unsigned long) src[1] << 8)
+                        + ((unsigned long) src[0]);
   printf("expire argument in milliseconds: %lu\n", result);
   
   return result + get_time_in_ms();
