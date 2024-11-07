@@ -120,7 +120,7 @@ unsigned long decode_timestamp_milliseconds(unsigned char* src) {
                         + ((unsigned long) src[2] << 16)
                         + ((unsigned long) src[1] << 8)
                         + ((unsigned long) src[0]);
-  printf("expire argument in milliseconds: %lu\n", result);
+  // printf("expire argument in milliseconds: %lu\n", result);
   
   return result;
 }
@@ -130,7 +130,7 @@ unsigned long decode_timestamp_seconds(unsigned char* src) {
                         + ((unsigned long) src[2] << 16)
                         + ((unsigned long) src[1] << 8)
                         + ((unsigned long) src[0]);
-  printf("expire argument in seconds: %lu\n", result);
+  // printf("expire argument in seconds: %lu\n", result);
 
   return result * 1000;
 }

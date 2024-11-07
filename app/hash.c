@@ -92,6 +92,8 @@ char* hashtable_get(HashEntry hash_table[], char* key) {
         return NULL;
       } 
 
+      printf("hit: (key, value): %s, %s\n", hash_table[i].key, hash_table[i].value);
+
       // not expired
       return hash_table[i].value;
     }
@@ -109,4 +111,13 @@ int hashtable_get_all_keys(HashEntry hash_table[], char result[][MAX_ARGUMENT_LE
     }
   }
   return number_of_keys;
+}
+
+bool hashtable_get_type(HashEntry hash_table[], char* result, char* key) {
+  char* value = hashtable_get(hash_table, key);
+  if (value == NULL) {
+    strcpy(result, TYPE_NONE);
+  } else {
+    strcpy(result, TYPE_STRING);
+  }
 }

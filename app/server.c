@@ -119,6 +119,13 @@ bool handle_keys(char* result, char* pattern) {
 	return false;
 }
 
+bool handle_type(char* result, char* key) {
+	char raw_result[BUFFER_SIZE];
+	hashtable_get_type(hashtable, raw_result, key);
+	get_simple_string(result, raw_result);
+	return true;
+}
+
 // command is a RESP array of bulk strings
 // RESP array are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
 // bulk strings are encoded as: $<length>\r\n<data>\r\n
@@ -179,6 +186,9 @@ int parse_command_from_client(char* result, char* command) {
 		return 0;
 	} else if (strcmp(decoded_command[0], "keys") == 0) {
 		handle_keys(result, decoded_command[1]);
+		return 0;
+	} else if (strcmp(decoded_command[0], "type") == 0) {
+		handle_type(result, decoded_command[1]);
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
