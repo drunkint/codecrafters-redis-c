@@ -57,7 +57,11 @@ bool handle_arguments(int argc, char* argv[]) {
 bool handle_set(char* result, char* key, char* value, char* flag, char* arg) {
 	unsigned long expiry_time = 0;
 	if (strcmp(flag, "px") == 0) {
-		expiry_time = (unsigned long)atoi(arg) + get_time_in_ms();
+		unsigned long expiry_interval = (unsigned long)atoi(arg);
+		if (expiry_interval == 0) {
+			return true;
+		}
+		expiry_time = expiry_interval + get_time_in_ms();
 	}
 
 	printf("in handle set, expiry_time is: %d\n", expiry_time);
