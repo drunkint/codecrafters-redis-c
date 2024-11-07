@@ -9,8 +9,9 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <poll.h>
-#include "hash.h"
+// #include "hash.h"
 #include "timer.h"
+#include "rdb.h"
 
 #define BUFFER_SIZE 1024
 #define MAX_ARGUMENT_LENGTH 256
@@ -18,9 +19,9 @@
 #define MAX_NUM_FDS 10
 
 // system wide variables
-HashEntry hashtable[HASH_NUM];
-struct pollfd fds[MAX_NUM_FDS];
-char results[MAX_NUM_FDS][BUFFER_SIZE];
+HashEntry hashtable[HASH_NUM];										// stores (key, value) and expiry date
+struct pollfd fds[MAX_NUM_FDS];										// list of fds we can use.
+char results[MAX_NUM_FDS][BUFFER_SIZE];						// for storing results to pass back to fds.
 
 char dir[MAX_ARGUMENT_LENGTH] = {0};
 char db_filename[MAX_ARGUMENT_LENGTH] = {0};
@@ -211,7 +212,15 @@ int main(int argc, char *argv[]) {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	printf("Logs from your program will appear here!\n");
 
+	hashtable_init(hashtable);
 	handle_arguments(argc, argv);
+	if (strlen(dir) > 0 || strlen(db_filename) > 0) {
+		char db_complete_filename[MAX_ARGUMENT_LENGTH];
+		sprintf(db_complete_filename, "%s/%s", dir, db_filename);
+
+		load_from_rdb_file(hashtable, db_complete_filename);
+		hashtable_print(hashtable);
+	}
 	
 	int server_fd, client_addr_len;
 	struct sockaddr_in client_addr;
@@ -245,8 +254,6 @@ int main(int argc, char *argv[]) {
 		printf("Listen failed: %s \n", strerror(errno));
 		return 1;
 	}
-
-	hashtable_init(hashtable);
 
 	// start of event loop
 	printf("Waiting for clients to connect...\n");
