@@ -1,3 +1,3 @@
 
 
-long get_time_in_ms();
+unsigned long get_time_in_ms();

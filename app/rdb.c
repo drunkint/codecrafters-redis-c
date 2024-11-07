@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rdb.h"
+#include "timer.h"
 /*
   Docs: https://rdb.fnordig.de/file_format.html#length-encoding
   CodeCrafters: https://app.codecrafters.io/courses/redis/stages/jz6?repo=13fd2cd4-3c72-462d-bb2f-d2dd56ab8049
@@ -14,7 +15,7 @@ int size_of_expiry_ht;
 /*
   returns number of unsigned chars used (skipped)
 
-  The 0x0D size specifies that the string is 13 characters long.
+  The 0x0D size specifies that the string is 13 characters unsigned long.
   The remaining characters spell out "Hello, World!".
     0D 48 65 6C 6C 6F 2C 20 57 6F 72 6C 64 21
 
@@ -105,6 +106,26 @@ int decode_size(char* dest , unsigned char* src) {
   return num_of_bytes_used;
 }
 
+unsigned long decode_timestamp_milliseconds(unsigned char* src) {
+  unsigned long result = (unsigned long) src[0] << 56 
+                        + (unsigned long) src[1] << 48
+                        + (unsigned long) src[2] << 40
+                        + (unsigned long) src[3] << 32
+                        + (unsigned long) src[4] << 24
+                        + (unsigned long) src[5] << 16
+                        + (unsigned long) src[6] << 8
+                        + (unsigned long) src[7];
+  return result + get_time_in_ms();
+}
+
+unsigned long decode_timestamp_seconds(unsigned char* src) {
+  unsigned long result = (unsigned long) src[4] << 24
+                        + (unsigned long) src[5] << 16
+                        + (unsigned long) src[6] << 8
+                        + (unsigned long) src[7];
+  return result * 1000 + get_time_in_ms();
+}
+
 bool load_from_rdb_file(HashEntry* dest_hashtable, const char* filename) {
   FILE* f;
   f = fopen(filename, "rb");
@@ -173,15 +194,17 @@ bool load_from_rdb_file(HashEntry* dest_hashtable, const char* filename) {
 
   // database content (ignore expiry dates for now)
   while(content[index] != 0xFF) {
-    
+    int expiry_time = -1;
     switch (content[index])
     {
     case 0xFC:
       index++;
+      expiry_time = decode_timestamp_milliseconds(&content[index]);
       index += 8; // skip for now
       break;
     case 0xFD:
       index++;
+      expiry_time = decode_timestamp_seconds(&content[index]);
       index += 4; // skip for now
       break;
     default:
@@ -201,25 +224,10 @@ bool load_from_rdb_file(HashEntry* dest_hashtable, const char* filename) {
 
       printf("index end: (key, value) = %d: (%s, %s)\n", index, key, value);
 
-
-      hashtable_set(dest_hashtable, key, value, -1);
+      hashtable_set(dest_hashtable, key, value, expiry_time);
       }
   }
   
-
-
-  // decode_size(result, 0x0A00);
-  // printf("decode size test: 10 = %s\n", result);
-  // decode_size(result, 0x0A1234);
-  // printf("decode size test: 10 = %s\n");
-
-
-  // while(content[index] != 0xFF) {
-  //   if (content[index] == 0xFB) {
-  //     size_of_key_value_ht = (int)content[index++];
-  //     size_of_expiry_ht = (int)content[index++];
-  //   } else if (content[index] == 0x)
-  // }
 
   
 }

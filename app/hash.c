@@ -44,7 +44,7 @@ void hashtable_delete(HashEntry hash_table[], const char* key) {
 
 // returns the index of the entry
 // only sets the (key, value) pair (No expiry_time)
-bool hashtable_set(HashEntry hash_table[], const char* key, const char* value, time_t expiry_time) {
+bool hashtable_set(HashEntry hash_table[], const char* key, const char* value, unsigned long expiry_time) {
   // printf("in hashtable_set, expiry time is: %d\n", expiry_time);
 
   for (int i = 0; i < HASH_NUM; i++) {
@@ -83,7 +83,7 @@ bool hashtable_set(HashEntry hash_table[], const char* key, const char* value, t
 }
 
 char* hashtable_get(HashEntry hash_table[], char* key) {
-  long current_time = get_time_in_ms();
+  unsigned long current_time = get_time_in_ms();
   
   for (int i = 0; i < HASH_NUM; i++) {
     if (hash_table[i].key != NULL && strcmp(hash_table[i].key, key) == 0 ) { // found key
