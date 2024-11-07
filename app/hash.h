@@ -2,13 +2,18 @@
 #include "format.h"
 
 #define HASH_NUM 1021
-#define TYPE_STRING "string"
-#define TYPE_NONE "none"
+
+typedef enum {
+	TYPE_STRING,
+	TYPE_NONE,
+	TYPE_STREAM
+} Type;
 
 typedef struct HashEntry {
 	char* key;
 	char* value;
 	unsigned long expiry_time;
+	Type type;
 } HashEntry;
 
 
