@@ -122,17 +122,17 @@ unsigned long decode_timestamp_milliseconds(unsigned char* src) {
                         + ((unsigned long) src[0]);
   printf("expire argument in milliseconds: %lu\n", result);
   
-  return result + get_time_in_ms();
+  return result;
 }
 
 unsigned long decode_timestamp_seconds(unsigned char* src) {
-  unsigned long result = ((unsigned long) src[0] << 24)
-                        + ((unsigned long) src[1] << 16)
-                        + ((unsigned long) src[2] << 8)
-                        + ((unsigned long) src[3]);
+  unsigned long result = ((unsigned long) src[3] << 24)
+                        + ((unsigned long) src[2] << 16)
+                        + ((unsigned long) src[1] << 8)
+                        + ((unsigned long) src[0]);
   printf("expire argument in seconds: %lu\n", result);
 
-  return result * 1000 + get_time_in_ms();
+  return result * 1000;
 }
 
 bool load_from_rdb_file(HashEntry* dest_hashtable, const char* filename) {
