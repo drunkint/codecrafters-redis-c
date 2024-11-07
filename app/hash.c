@@ -22,14 +22,14 @@ void delete_hash_entry(HashEntry* hash_entry) {
 
   hash_entry->key = NULL;
   hash_entry->value = NULL;
-  hash_entry->expiry_time = -1;
+  hash_entry->expiry_time = 0;
 }
 
 void hashtable_init(HashEntry hash_table[]) {
   for (int i = 0; i < HASH_NUM; i++) {
     hash_table[i].key = NULL;
     hash_table[i].value = NULL;
-    hash_table[i].expiry_time = -1;
+    hash_table[i].expiry_time = 0;
   }
 }
 

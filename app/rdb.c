@@ -194,7 +194,7 @@ bool load_from_rdb_file(HashEntry* dest_hashtable, const char* filename) {
 
   // database content (ignore expiry dates for now)
   while(content[index] != 0xFF) {
-    int expiry_time = -1;
+    unsigned long expiry_time = 0;
     switch (content[index])
     {
     case 0xFC:
