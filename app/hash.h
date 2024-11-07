@@ -18,8 +18,8 @@ typedef struct HashEntry {
 
 
 void hashtable_init(HashEntry hash_table[]);
-bool hashtable_set(HashEntry hash_table[], const char* key, const char* value, unsigned long expiry_time);
+bool hashtable_set(HashEntry hash_table[], Type type, const char* key, const char* value, unsigned long expiry_time);
 char* hashtable_get(HashEntry hash_table[], char* key);
 void hashtable_print(HashEntry hash_table[]);
 int hashtable_get_all_keys(HashEntry hash_table[], char result[][MAX_ARGUMENT_LENGTH]);
-bool hashtable_get_type(HashEntry hash_table[], char* result, char* key);
+void hashtable_get_type(HashEntry hash_table[], char* result, char* key);

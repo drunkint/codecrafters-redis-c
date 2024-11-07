@@ -109,7 +109,7 @@ int hashtable_find(HashEntry hash_table[], char* key) {
     if (hash_table[i].key != NULL && strcmp(hash_table[i].key, key) == 0 ) { // found key
       if (0 < hash_table[i].expiry_time  && hash_table[i].expiry_time <= current_time) { // expired
         delete_hash_entry(&hash_table[i]);
-        return NULL;
+        return -1;
       } 
 
       // not expired

@@ -66,7 +66,7 @@ bool handle_set(char* result, char* key, char* value, char* flag, char* arg) {
 
 	printf("in handle set, expiry_time is: %d\n", expiry_time);
 
-	if (!hashtable_set(hashtable, key, value, expiry_time)) {
+	if (!hashtable_set(hashtable, TYPE_STRING, key, value, expiry_time)) {
 		get_simple_string(result, "ERROR-SET");
 		return false;
 	}
