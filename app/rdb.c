@@ -115,7 +115,8 @@ unsigned long decode_timestamp_milliseconds(unsigned char* src) {
                         + (unsigned long) src[5] << 16
                         + (unsigned long) src[6] << 8
                         + (unsigned long) src[7];
-  return result + get_time_in_ms();
+  
+  return result == 0 ? 0 : result + get_time_in_ms();
 }
 
 unsigned long decode_timestamp_seconds(unsigned char* src) {
@@ -123,7 +124,7 @@ unsigned long decode_timestamp_seconds(unsigned char* src) {
                         + (unsigned long) src[5] << 16
                         + (unsigned long) src[6] << 8
                         + (unsigned long) src[7];
-  return result * 1000 + get_time_in_ms();
+  return result == 0 ? 0 : result * 1000 + get_time_in_ms();
 }
 
 bool load_from_rdb_file(HashEntry* dest_hashtable, const char* filename) {
