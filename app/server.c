@@ -12,9 +12,8 @@
 // #include "hash.h"
 #include "timer.h"
 #include "rdb.h"
+#include "format.h"
 
-#define BUFFER_SIZE 1024
-#define MAX_ARGUMENT_LENGTH 256
 #define MAX_NUM_ARGUMENTS 8
 #define MAX_NUM_FDS 10
 
@@ -36,48 +35,6 @@ bool add_to_fds(int fd) {
 		}
 	}
 	return false;
-}
-
-bool is_digit(char character) {
-	return '0' <= character && character <= '9';
-}
-
-void modify_to_lower(char* str) {
-	for(int i = 0; i < strlen(str); i++){
-		str[i] = tolower(str[i]);
-	}
-}
-
-// str has max size BUFFER_SIZE
-// bulk strings are encoded as: $<length>\r\n<data>\r\n
-void get_bulk_string(char* dest, char* src) {
-	if (src == NULL) {
-		strcpy(dest, "$-1\r\n");
-		return;
-	}
-
-	int length = strlen(src);
-	sprintf(dest, "$%d\r\n%s\r\n", length, src);
-}
-
-// simple strings are encoded as: +<data>\r\n
-void get_simple_string(char* dest, char* src) {
-	sprintf(dest, "+%s\r\n", src);
-}
-
-// RESP arrays are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
-// Assumption: each element in src is encoded
-void get_resp_array(char* dest, char src[][MAX_ARGUMENT_LENGTH], int number_of_elements) {
-	char consecutive_elements[BUFFER_SIZE];
-	memset(consecutive_elements, '\0', BUFFER_SIZE);
-	printf("resp start\n");
-	for (int i = 0; i < number_of_elements; i++) {
-		// printf("concatanating %s to %s\n", src[i], consecutive_elements);
-		strcat(consecutive_elements, src[i]);
-		// printf("-- resulting in %s\n", consecutive_elements);
-
-	}
-	sprintf(dest, "*%d\r\n%s", number_of_elements, consecutive_elements);
 }
 
 bool handle_arguments(int argc, char* argv[]) {
@@ -139,6 +96,25 @@ bool handle_config_get(char* result, char* raw_name) {
 	return true;
 }
 
+bool handle_keys(char* result, char* pattern) {
+	char raw_result[HASH_NUM][MAX_ARGUMENT_LENGTH] = {0};
+	char result_before_formatting[HASH_NUM][MAX_ARGUMENT_LENGTH] = {0};
+	// printf("pattern: %s\n", pattern);
+
+	// check if pattern is *. Only supports * at this time.
+	if (pattern[0] == '*') {
+		int key_num = hashtable_get_all_keys(hashtable, raw_result);
+		for (int i = 0; i < key_num; i++) {
+			char temp[MAX_ARGUMENT_LENGTH] = {0};
+			printf("key[%d]: %s\n", i, raw_result);
+			get_bulk_string(result_before_formatting[i], raw_result[i]);
+		}
+		get_resp_array(result, result_before_formatting, key_num);
+		return true;
+	}
+	return false;
+}
+
 // command is a RESP array of bulk strings
 // RESP array are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
 // bulk strings are encoded as: $<length>\r\n<data>\r\n
@@ -196,6 +172,9 @@ int parse_command_from_client(char* result, char* command) {
 		return 0;
 	} else if (strcmp(decoded_command[0], "config") == 0 && strcmp(decoded_command[1], "get") == 0) {
 		handle_config_get(result, decoded_command[2]);
+		return 0;
+	} else if (strcmp(decoded_command[0], "keys") == 0) {
+		handle_keys(result, decoded_command[1]);
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");

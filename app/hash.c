@@ -4,6 +4,7 @@
 #include <string.h>
 #include "hash.h"
 #include "timer.h"
+#include "format.h"
 
 void hashtable_print(HashEntry hash_table[]) {
   for (int i = 0; i < HASH_NUM; i++) {
@@ -98,5 +99,14 @@ char* hashtable_get(HashEntry hash_table[], char* key) {
   return NULL;
 }
 
-
-
+// returns number of keys
+int hashtable_get_all_keys(HashEntry hash_table[], char result[][MAX_ARGUMENT_LENGTH]) {
+  int number_of_keys = 0;
+  for (int i = 0; i < HASH_NUM; i++) {
+    if (hash_table[i].key != NULL) {
+      strcpy(result[number_of_keys], hash_table[i].key);
+      number_of_keys++;
+    }
+  }
+  return number_of_keys;
+}
