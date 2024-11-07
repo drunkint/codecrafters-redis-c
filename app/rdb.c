@@ -109,7 +109,7 @@ int decode_size(char* dest , unsigned char* src) {
 unsigned long decode_timestamp_milliseconds(unsigned char* src) {
   printf("printing each individually: ");
   for (int i = 0; i < 8; i++) {
-    printf("%u", src[i]);
+    printf("%lu", (unsigned long)src[i]);
   }
   printf("\n");
   unsigned long result = ((unsigned long) src[0] << 56)
