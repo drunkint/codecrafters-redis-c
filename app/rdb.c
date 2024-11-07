@@ -222,7 +222,7 @@ bool load_from_rdb_file(HashEntry* dest_hashtable, const char* filename) {
       int value_length = decode_string(value, &content[index]);
       index += value_length;
 
-      printf("index end: (key, value, expiry) = %d: (%s, %s, %lu)\n", index, key, value, expiry_time);
+      printf("index end: (key, value, expiry, cur time) = %d: (%s, %s, %lu, %lu)\n", index, key, value, expiry_time, get_time_in_ms());
 
       hashtable_set(dest_hashtable, key, value, expiry_time);
       }

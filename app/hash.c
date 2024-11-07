@@ -12,7 +12,7 @@ void hashtable_print(HashEntry hash_table[]) {
       continue;
     }
     
-    printf("(%s, %s), expire at: %d\n", hash_table[i].key, hash_table[i].value, hash_table[i].expiry_time);
+    printf("(%s, %s), expire at: %lu\n", hash_table[i].key, hash_table[i].value, hash_table[i].expiry_time);
   }
 }
 
@@ -87,7 +87,7 @@ char* hashtable_get(HashEntry hash_table[], char* key) {
   
   for (int i = 0; i < HASH_NUM; i++) {
     if (hash_table[i].key != NULL && strcmp(hash_table[i].key, key) == 0 ) { // found key
-      if (hash_table[i].expiry_time > 0 && hash_table[i].expiry_time <= current_time) { // expired
+      if (0 < hash_table[i].expiry_time  && hash_table[i].expiry_time <= current_time) { // expired
         delete_hash_entry(&hash_table[i]);
         return NULL;
       } 
