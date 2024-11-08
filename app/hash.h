@@ -2,6 +2,8 @@
 #include "format.h"
 
 #define HASH_NUM 1021
+#define STREAM_ID_SIZE 30
+#define MAX_NUM_OF_KEYS_IN_STREAM 10
 
 typedef enum {
 	TYPE_STRING,
@@ -14,6 +16,8 @@ typedef struct HashEntry {
 	char* value;
 	unsigned long expiry_time;
 	Type type;
+
+	// only used when type = TYPE_STREAM
 } HashEntry;
 
 
