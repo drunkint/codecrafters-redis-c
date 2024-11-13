@@ -1,9 +1,6 @@
-// #include <stdbool.h>
-// #include "hash.h"
+#include <stdbool.h>
+#include "hash.h"
+int decode_string(char* dest, unsigned char* src);
+int decode_size(char* dest , unsigned char* src);
 
-// #define BUFFER_SIZE 1024
-
-// int decode_string(char* dest, unsigned char* src);
-// int decode_size(char* dest , unsigned char* src);
-
-// bool load_from_rdb_file(HashEntry* dest_hashtable, const char* filename);
+bool load_from_rdb_file(HashTable* dest_hashtable, const char* filename);

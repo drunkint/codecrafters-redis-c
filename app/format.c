@@ -46,3 +46,16 @@ void get_resp_array(char* dest, char src[][MAX_ARGUMENT_LENGTH], int number_of_e
 	}
 	sprintf(dest, "*%d\r\n%s", number_of_elements, consecutive_elements);
 }
+
+void get_resp_array_pointer(char* dest, char** src, int number_of_elements) {
+	char consecutive_elements[BUFFER_SIZE];
+	memset(consecutive_elements, '\0', BUFFER_SIZE);
+	printf("resp start\n");
+	for (int i = 0; i < number_of_elements; i++) {
+		// printf("concatanating %s to %s\n", src[i], consecutive_elements);
+		strcat(consecutive_elements, src[i]);
+		// printf("-- resulting in %s\n", consecutive_elements);
+
+	}
+	sprintf(dest, "*%d\r\n%s", number_of_elements, consecutive_elements);
+}

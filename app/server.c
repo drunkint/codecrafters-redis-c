@@ -9,9 +9,9 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <poll.h>
-#include "hash.h"
+// #include "hash.h"
 #include "timer.h"
-// #include "rdb.h"
+#include "rdb.h"
 #include "format.h"
 
 #define MAX_NUM_ARGUMENTS 8
@@ -101,22 +101,35 @@ bool handle_config_get(char* result, char* raw_name) {
 	return true;
 }
 
-bool handle_keys(char* result, char* pattern) {
-	// char raw_result[HASH_NUM][MAX_ARGUMENT_LENGTH] = {0};
-	// char result_before_formatting[HASH_NUM][MAX_ARGUMENT_LENGTH] = {0};
-	// // printf("pattern: %s\n", pattern);
+void freeStrings(char** src, int length) {
+	for (int i = 0; i < length; i++) {
+		free(src[i]);
+	}
+	free(src);
+}	
 
-	// // check if pattern is *. Only supports * at this time.
-	// if (pattern[0] == '*') {
-	// 	int key_num = hashtable_get_all_keys(hashtable, raw_result);
-	// 	for (int i = 0; i < key_num; i++) {
-	// 		char temp[MAX_ARGUMENT_LENGTH] = {0};
-	// 		printf("key[%d]: %s\n", i, raw_result);
-	// 		get_bulk_string(result_before_formatting[i], raw_result[i]);
-	// 	}
-	// 	get_resp_array(result, result_before_formatting, key_num);
-	// 	return true;
-	// }
+bool handle_keys(char* result, char* pattern) {
+	// check if pattern is *. Only supports * at this time.
+	if (pattern[0] == '*') {
+		char** raw_result = ht_get_keys(ht, NULL);
+		char** result_before_formatting = calloc(ht->num_of_elements, sizeof(char*));
+
+		for (int i = 0; i < ht->num_of_elements; i++) {
+			char temp[MAX_ARGUMENT_LENGTH] = {0};
+			printf("key[%d]: %s\n", i, raw_result[i]);
+			get_bulk_string(temp, raw_result[i]);
+
+			result_before_formatting[i] = calloc(strlen(temp) + 1, sizeof(char));
+			strcpy(result_before_formatting[i], temp);
+		}
+		get_resp_array_pointer(result, result_before_formatting, ht->num_of_elements);
+
+		freeStrings(raw_result, ht->num_of_elements);
+		freeStrings(result_before_formatting, ht->num_of_elements);
+
+		return true;
+	}
+
 	return false;
 }
 
@@ -213,13 +226,13 @@ int main(int argc, char *argv[]) {
 
 	ht = ht_create_table(INITIAL_TABLE_SIZE);
 	handle_arguments(argc, argv);
-	// if (strlen(dir) > 0 || strlen(db_filename) > 0) {
-	// 	char db_complete_filename[MAX_ARGUMENT_LENGTH];
-	// 	sprintf(db_complete_filename, "%s/%s", dir, db_filename);
+	if (strlen(dir) > 0 || strlen(db_filename) > 0) {
+		char db_complete_filename[MAX_ARGUMENT_LENGTH];
+		sprintf(db_complete_filename, "%s/%s", dir, db_filename);
 
-	// 	load_from_rdb_file(hashtable, db_complete_filename);
-	// 	hashtable_print(hashtable);
-	// }
+		load_from_rdb_file(ht, db_complete_filename);
+		ht_print(ht);
+	}
 	
 	int server_fd, client_addr_len;
 	struct sockaddr_in client_addr;

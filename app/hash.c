@@ -93,12 +93,18 @@ void hash_entry_delete(HashEntry* hash_entry, bool should_free, HashEntry* prev)
   }
 }
 
-// assumes hash_entry is not null, but might be empty.
-bool hash_entry_should_be_set(HashEntry* hash_entry, const char* key) {
-  return hash_entry != NULL && (                                           // hash entry is null
-          hash_entry->key == NULL ||                                        // hash entry's key is empty
-          (hash_entry->key != NULL && strcmp(hash_entry->key, key) == 0));   // hash entry's key matches provided key
+bool key_should_be_replaced_in_existing_hash_entry(HashEntry* hash_entry, const char* key) {
+  return hash_entry != NULL &&                                             // hash entry is null
+         (hash_entry->key != NULL && strcmp(hash_entry->key, key) == 0);   // hash entry's key matches provided key
 }
+
+
+bool key_should_be_added_to_existing_hash_entry(HashEntry* hash_entry, const char* key) {
+  return hash_entry != NULL &&                                           // hash entry is null
+         hash_entry->key == NULL;                                        // hash entry's key is empty
+}
+
+
 
 unsigned long hash_func_djb2(const char* key, unsigned long table_size) {
   unsigned long hash_value = 5381;
@@ -198,9 +204,16 @@ void ht_set(HashTable* ht, const char* key, const char* value, Type value_type, 
   HashEntry* prev = NULL;       // only used when chaining a new hash_entry
 
   while(cur != NULL) {
-    if (hash_entry_should_be_set(cur, key)) {
+    if (key_should_be_added_to_existing_hash_entry(cur, key)) {
       hash_entry_assign(cur, key, value, value_type, expiry_time, cur->next);
       ht->num_of_elements++;
+      return;
+    }
+
+    if (key_should_be_replaced_in_existing_hash_entry(cur, key)) {
+      hash_entry_assign(cur, key, value, value_type, expiry_time, cur->next);
+      // printf("%s vs %s\n", cur->key, key);
+      // printf("-num of elem: %d\n", ht->num_of_elements);
       return;
     }
 
@@ -212,6 +225,8 @@ void ht_set(HashTable* ht, const char* key, const char* value, Type value_type, 
   cur = hash_entry_create(key, value, value_type, expiry_time);
   prev->next = cur;
   ht->num_of_elements++;
+  // printf("--num of elem: %d\n", ht->num_of_elements);
+
   return;
   
 }
@@ -226,7 +241,6 @@ char* ht_get(HashTable* ht, const char* key) {
     if (strcmp(cur->key, key) == 0 && is_hash_entry_valid(cur)) {
       return cur->value;
     } else if (strcmp(cur->key, key) == 0 && !is_hash_entry_valid(cur)) {
-
       hash_entry_delete(cur, !is_first_in_chain, prev);
       return NULL;
     }
@@ -262,6 +276,41 @@ void ht_print(HashTable* hash_table) {
       printf("\n");
     }
   }
+}
+
+char** ht_get_keys(const HashTable* hash_table, const char* pattern) {
+  HashEntry* ht = hash_table->ht;
+
+  char** result = calloc(hash_table->num_of_elements, sizeof(char*));
+
+  int result_counter = 0;
+  for (int i = 0; i < hash_table->table_size; i++) {
+    char type_temp[10] = {0};
+    if (is_hash_entry_valid(&ht[i])) {
+      // printf("-- adding %s\n", ht[i].key);
+      result[result_counter] = calloc(strlen(ht[i].key) + 1, sizeof(char));
+      strcpy(result[result_counter], ht[i].key);
+      // printf("-- added %s\n", ht[i].key);
+
+      result_counter++;
+    }
+
+    HashEntry* cur = ht[i].next;
+    while(cur != NULL) {
+      if (!is_hash_entry_valid(cur)) {
+        cur = cur->next;
+        continue;
+      }
+
+      printf("added %s\n", cur->key);
+      result[result_counter] = calloc(strlen(cur->key) + 1, sizeof(char));
+      strcpy(result[result_counter], cur->key);
+      result_counter++;
+      cur = cur->next;
+    }
+  }
+
+  return result;
 }
 
 // void delete_hash_entry(HashEntry* hash_entry) {

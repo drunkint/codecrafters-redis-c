@@ -30,10 +30,11 @@ typedef struct HashTable {
 } HashTable;
 
 HashTable* ht_create_table(unsigned long table_size);
+HashTable* ht_handle_resizing(HashTable* ht);
 void ht_set(HashTable* ht, const char* key, const char* value, Type value_type, unsigned long expiry_time);
 char* ht_get(HashTable* ht, const char* key);
+char** ht_get_keys(const HashTable* hash_table, const char* pattern);
 void ht_print(HashTable* hash_table);
-HashTable* ht_handle_resizing(HashTable* ht);
 
 // void hashtable_init(HashEntry hash_table[]);
 // bool hashtable_set(HashEntry hash_table[], Type type, const char* key, const char* value, unsigned long expiry_time);
