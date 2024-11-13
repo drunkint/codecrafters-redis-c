@@ -11,7 +11,7 @@
 // load factor = num of elements / table size
 #define MIN_HASHTABLE_SIZE 4
 
-void get_type(char* result, Type type) {
+void get_type_string(char* result, Type type) {
   switch (type)
   {
   case TYPE_STREAM:
@@ -42,6 +42,7 @@ HashTable* ht_create_table(unsigned long table_size) {
     entries[i].type = TYPE_NONE;
     entries[i].expiry_time = 0;
     entries[i].next = NULL;
+    entries[i].is_first_in_chain = true;
   }
 
   new_ht->ht = entries;
@@ -49,7 +50,7 @@ HashTable* ht_create_table(unsigned long table_size) {
   return new_ht;
 }
 
-void hash_entry_assign(HashEntry* dest, const char* key, const char* value, Type value_type, unsigned long expiry_time, HashEntry* next) {
+void hash_entry_assign(HashEntry* dest, const char* key, const char* value, Type value_type, unsigned long expiry_time, HashEntry* next, bool is_first_in_chain) {
   dest->key = calloc(1, strlen(key) + 1);
   strcpy(dest->key, key);
 
@@ -59,39 +60,16 @@ void hash_entry_assign(HashEntry* dest, const char* key, const char* value, Type
   dest->type = value_type;
   dest->expiry_time = expiry_time;
   dest->next = next;
+  dest->is_first_in_chain = is_first_in_chain;
 }
 
 HashEntry* hash_entry_create(const char* key, const char* value, Type value_type, unsigned long expiry_time) {
   HashEntry* new_entry = calloc(1, sizeof(HashEntry));
-  hash_entry_assign(new_entry, key, value, value_type, expiry_time, NULL);
+  hash_entry_assign(new_entry, key, value, value_type, expiry_time, NULL, false);
 
   return new_entry;
 }
 
-void hash_entry_delete(HashEntry* hash_entry, bool should_free, HashEntry* prev) {
-  if (prev != NULL) {
-    prev->next = hash_entry->next;
-  }
-  printf("-- del start\n");
-  printf("-- del key\n");
-
-  free(hash_entry->key);
-  hash_entry->key = NULL;
-
-  printf("-- del val\n");
-  free(hash_entry->value);
-  hash_entry->value = NULL;
-
-  printf("-- del other non pointer stuff\n");
-  hash_entry->type = TYPE_NONE;
-  hash_entry->expiry_time = 0;
-  hash_entry->next = NULL;
-
-  if (should_free) {
-    printf("-- del free\n");
-    free(hash_entry);
-  }
-}
 
 bool key_should_be_replaced_in_existing_hash_entry(HashEntry* hash_entry, const char* key) {
   return hash_entry != NULL &&                                             // hash entry is null
@@ -114,26 +92,77 @@ unsigned long hash_func_djb2(const char* key, unsigned long table_size) {
   return hash_value % table_size;
 }
 
+void hash_entry_free(HashEntry* hash_entry) {
+  printf("- free start\n");
+  printf("-- free key\n");
+
+  free(hash_entry->key);
+  hash_entry->key = NULL;
+
+  printf("-- free val\n");
+  free(hash_entry->value);
+  hash_entry->value = NULL;
+
+  hash_entry->next = NULL;
+  hash_entry->type = TYPE_NONE;
+
+  if (!hash_entry->is_first_in_chain) {
+    printf("-- free whole entry\n");
+    free(hash_entry);
+  }
+}
+
 void ht_delete_table(HashTable* hash_table) {
   HashEntry* ht = hash_table->ht;
   for (int i = 0; i < hash_table->table_size; i++) {
     HashEntry* cur = &ht[i];
     HashEntry* next = cur->next;
 
-    // delete the entry in the ht array (shouldn't free)
-    hash_entry_delete(cur, false, NULL);
+    hash_entry_free(cur);
     cur = next;
 
-    // delete the chained entries (should free)
     while (cur != NULL) {
       next = cur->next;
       printf("hii\n");
-      hash_entry_delete(cur, true, NULL);
+      hash_entry_free(cur);
       cur = next;
     }
   }
   free(ht);
   free(hash_table);
+}
+
+bool ht_delete(HashTable* ht, const char* key) {
+  unsigned long index = hash_func_djb2(key, ht->table_size);
+  HashEntry* cur = &ht->ht[index];
+  HashEntry* prev = NULL;
+
+  while(cur != NULL && cur->type != TYPE_NONE) {
+    if (strcmp(cur->key, key) == 0) {
+      // delete cur
+      HashEntry* next = cur->next;
+      // hash_entry_free(cur);
+      if (cur->is_first_in_chain && next == NULL) {
+        hash_entry_free(cur);
+      } else if (cur->is_first_in_chain && next != NULL) {
+        hash_entry_free(cur);
+        hash_entry_assign(cur, next->key, next->value, next->type, next->expiry_time, next->next, true);
+        hash_entry_free(next);
+      } else {
+        prev->next = next;
+        hash_entry_free(cur);
+      }
+
+      ht->num_of_elements--;
+      return true;
+    }
+
+    prev = cur;
+    cur = cur->next;
+  }
+
+  return false;
+  
 }
 
 // resize is either up or down.
@@ -150,7 +179,7 @@ HashTable* ht_resize(HashTable* src_ht, bool is_up) {
   for (int i = 0; i < src_ht->table_size; i++) {
     if (is_hash_entry_valid(&ht[i])) {
       char type_temp[10] = {0};
-      get_type(type_temp, ht[i].type);
+      get_type_string(type_temp, ht[i].type);
       printf("-- adding %d: (%s, %s), type %s, expire %lu\n", i, ht[i].key, ht[i].value, type_temp, ht[i].expiry_time);
       ht_set(dest_ht, ht[i].key, ht[i].value, ht[i].type, ht[i].expiry_time);
       printf("--- added %d: (%s, %s), type %s, expire %lu\n", i, ht[i].key, ht[i].value, type_temp, ht[i].expiry_time);
@@ -163,7 +192,7 @@ HashTable* ht_resize(HashTable* src_ht, bool is_up) {
         continue;
       }
       char type_temp[10] = {0};
-      get_type(type_temp, cur->type);
+      get_type_string(type_temp, cur->type);
       printf("-> adding %d: (%s, %s), type %s, expire %lu\n", i, cur->key, cur->value, type_temp, cur->expiry_time);
 
       ht_set(dest_ht, cur->key, cur->value, cur->type, cur->expiry_time);
@@ -202,16 +231,17 @@ void ht_set(HashTable* ht, const char* key, const char* value, Type value_type, 
   unsigned long index = hash_func_djb2(key, ht->table_size);
   HashEntry* cur = &ht->ht[index];
   HashEntry* prev = NULL;       // only used when chaining a new hash_entry
+  bool is_first_in_chain = true;
 
   while(cur != NULL) {
     if (key_should_be_added_to_existing_hash_entry(cur, key)) {
-      hash_entry_assign(cur, key, value, value_type, expiry_time, cur->next);
+      hash_entry_assign(cur, key, value, value_type, expiry_time, cur->next, is_first_in_chain);
       ht->num_of_elements++;
       return;
     }
 
     if (key_should_be_replaced_in_existing_hash_entry(cur, key)) {
-      hash_entry_assign(cur, key, value, value_type, expiry_time, cur->next);
+      hash_entry_assign(cur, key, value, value_type, expiry_time, cur->next, is_first_in_chain);
       // printf("%s vs %s\n", cur->key, key);
       // printf("-num of elem: %d\n", ht->num_of_elements);
       return;
@@ -219,6 +249,7 @@ void ht_set(HashTable* ht, const char* key, const char* value, Type value_type, 
 
     prev = cur;       // only used when chaining a new hash_entry
     cur = cur->next;
+    is_first_in_chain = false;
   }
 
   // cur is NULL, prev is previous node. Should chain a new hash_entry
@@ -231,34 +262,61 @@ void ht_set(HashTable* ht, const char* key, const char* value, Type value_type, 
   
 }
 
-char* ht_get(HashTable* ht, const char* key) {
+HashEntry* ht_get_entry_ignore_expiry(HashTable* ht, const char* key) {
   unsigned long index = hash_func_djb2(key, ht->table_size);
   HashEntry* cur = &ht->ht[index];
-  HashEntry* prev = NULL;
-  bool is_first_in_chain = true;
 
   while(cur != NULL && cur->type != TYPE_NONE) {
-    if (strcmp(cur->key, key) == 0 && is_hash_entry_valid(cur)) {
-      return cur->value;
-    } else if (strcmp(cur->key, key) == 0 && !is_hash_entry_valid(cur)) {
-      hash_entry_delete(cur, !is_first_in_chain, prev);
-      return NULL;
+    printf("cur.key, key = %s, %s\n", cur->key, key);
+    if (strcmp(cur->key, key) == 0) {
+      return cur;
     }
 
-    prev = cur;
     cur = cur->next;
-    is_first_in_chain = false;
   }
-
   return NULL;
 }
 
+HashEntry* ht_get_entry(HashTable* ht, const char* key) {
+  HashEntry* e = ht_get_entry_ignore_expiry(ht, key);
+  if (e == NULL) {
+    return NULL;
+  } else if (e->expiry_time > 0 && e->expiry_time <= get_time_in_ms()) {
+    // delete entry
+    ht_delete(ht, key);
+    return NULL;
+  }
+
+  return e;
+}
+
+char* ht_get_value(HashTable* ht, const char* key) {
+  HashEntry* e = ht_get_entry(ht, key);
+  
+  if (e == NULL) {
+    return NULL;
+  }
+
+  return e->value;
+}
+
+Type ht_get_type(HashTable* ht, const char* key) {
+  HashEntry* e = ht_get_entry(ht, key);
+  
+  if (e == NULL) {
+    return TYPE_NONE;
+  }
+
+  return e->type;
+}
+
 void ht_print(HashTable* hash_table) {
+  printf("printing hash table...\n");
   HashEntry* ht = hash_table->ht;
   for (int i = 0; i < hash_table->table_size; i++) {
     char type_temp[10] = {0};
     if (ht[i].type != TYPE_NONE) {
-      get_type(type_temp, ht[i].type);
+      get_type_string(type_temp, ht[i].type);
       printf("%d: (%s, %s), type %s, expire %lu ", i, ht[i].key, ht[i].value, type_temp, ht[i].expiry_time);
     }
     HashEntry* cur = ht[i].next;
@@ -268,7 +326,7 @@ void ht_print(HashTable* hash_table) {
         continue;
       }
 
-      get_type(type_temp, cur->type);
+      get_type_string(type_temp, cur->type);
       printf("-> %d: (%s, %s), type %s, expire %lu ", i, cur->key, cur->value, type_temp, cur->expiry_time);
       cur = cur->next;
     }
@@ -312,107 +370,3 @@ char** ht_get_keys(const HashTable* hash_table, const char* pattern) {
 
   return result;
 }
-
-// void delete_hash_entry(HashEntry* hash_entry) {
-//   free(hash_entry->key);
-//   free(hash_entry->value);
-
-//   hash_entry->key = NULL;
-//   hash_entry->value = NULL;
-//   hash_entry->expiry_time = 0;
-//   hash_entry->type = TYPE_NONE;
-// }
-
-// void hashtable_delete(HashEntry hash_table[], const char* key) {
-//   for (int i = 0; i < HASH_NUM; i++) {
-//     if (hash_table[i].key != NULL && strcmp(hash_table[i].key, key) == 0) {
-//       delete_hash_entry(&hash_table[i]);
-//       return;
-//     }
-//   }
-// }
-
-// // returns the index of the entry
-// // only sets the (key, value) pair (No expiry_time)
-// bool hashtable_set(HashEntry hash_table[], Type type, const char* key, const char* value, unsigned long expiry_time) {
-//   // printf("in hashtable_set, expiry time is: %d\n", expiry_time);
-
-//   for (int i = 0; i < HASH_NUM; i++) {
-
-//     // setting an existing entry
-//     if (hash_table[i].key != NULL && strcmp(hash_table[i].key, key) == 0) {
-//       if (value == NULL) {
-//         hash_table[i].value = NULL;
-//         hash_table[i].expiry_time = expiry_time;
-//         hash_table[i].type = TYPE_NONE;
-//       } else {
-//         free(hash_table[i].value);
-//         hash_table[i].value = calloc(strlen(value) + 1, sizeof(char));
-//         strcpy(hash_table[i].value, value);
-
-//         hash_table[i].expiry_time = expiry_time;
-//         hash_table[i].type = TYPE_STRING;
-//       }
-//       return true;
-//     }
-//   }
-
-//   // setting a blank entry
-//   for (int i = 0; i < HASH_NUM; i++) {
-//     if (hash_table[i].key == NULL) {
-//       hash_table[i].key = calloc(strlen(key) + 1, sizeof(char));
-//       strcpy(hash_table[i].key, key);
-
-//       hash_table[i].value = calloc(strlen(value) + 1, sizeof(char));
-//       strcpy(hash_table[i].value, value);
-
-//       hash_table[i].expiry_time = expiry_time;
-//       hash_table[i].type = TYPE_STRING;
-
-//       return true;
-//     }
-//   }
-//   return false;
-// }
-
-// int hashtable_find(HashEntry hash_table[], char* key) {
-//   unsigned long current_time = get_time_in_ms();
-  
-//   for (int i = 0; i < HASH_NUM; i++) {
-//     if (hash_table[i].key != NULL && strcmp(hash_table[i].key, key) == 0 ) { // found key
-//       if (0 < hash_table[i].expiry_time  && hash_table[i].expiry_time <= current_time) { // expired
-//         delete_hash_entry(&hash_table[i]);
-//         return -1;
-//       } 
-
-//       // not expired
-//       return i;
-//     }
-//   }
-//   return -1;
-// }
-
-// char* hashtable_get(HashEntry hash_table[], char* key) {
-//   int hash_entry_index = hashtable_find(hash_table, key);
-//   if (hash_entry_index == -1) {
-//     return NULL;
-//   }
-//   return hash_table[hash_entry_index].value;
-// }
-
-// // returns number of keys
-// int hashtable_get_all_keys(HashEntry hash_table[], char result[][MAX_ARGUMENT_LENGTH]) {
-//   int number_of_keys = 0;
-//   for (int i = 0; i < HASH_NUM; i++) {
-//     if (hash_table[i].key != NULL) {
-//       strcpy(result[number_of_keys], hash_table[i].key);
-//       number_of_keys++;
-//     }
-//   }
-//   return number_of_keys;
-// }
-
-// void hashtable_get_type(HashEntry hash_table[], char* result, char* key) {
-//   int hash_entry_index = hashtable_find(hash_table, key);
-//   get_type(result, hash_table[hash_entry_index].type);
-// }

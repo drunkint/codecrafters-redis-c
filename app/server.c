@@ -71,7 +71,6 @@ bool handle_set(char* result, char* key, char* value, char* flag, char* arg) {
 
 	ht_set(ht, key, value, TYPE_STRING, expiry_time);
 	ht = ht_handle_resizing(ht);
-	ht_print(ht);
 
 
 	get_simple_string(result, "OK");
@@ -79,8 +78,14 @@ bool handle_set(char* result, char* key, char* value, char* flag, char* arg) {
 }
 
 bool handle_get(char* result, char* key) {
-	char* value = ht_get(ht, key);
+	char* value = ht_get_value(ht, key);
 	get_bulk_string(result, value);
+	return true;
+}
+
+bool handle_delete(char* result, char* key) {
+	ht_delete(ht, key);
+	get_simple_string(result, "OK");
 	return true;
 }
 
@@ -179,7 +184,7 @@ int parse_command_from_client(char* result, char* command) {
 		if (!is_digit(decoded_command[i][0])) {
 			modify_to_lower(decoded_command[i]);
 		}
-		printf("%d: %s, ", i, decoded_command[i]);
+		printf("%s ", decoded_command[i]);
 
 		cur = strchr(cur, '\n') + 1; // skip <data>\r\n
 	}
@@ -196,9 +201,15 @@ int parse_command_from_client(char* result, char* command) {
 		return 0;
 	} else if (strcmp(decoded_command[0], "set") == 0) {
 		handle_set(result, decoded_command[1], decoded_command[2], decoded_command[3], decoded_command[4]);
+		ht_print(ht);
 		return 0;
 	} else if (strcmp(decoded_command[0], "get") == 0) {
 		handle_get(result, decoded_command[1]);
+		ht_print(ht);
+		return 0;
+	} else if (strcmp(decoded_command[0], "delete") == 0) {
+		handle_delete(result, decoded_command[1]);
+		ht_print(ht);
 		return 0;
 	} else if (strcmp(decoded_command[0], "config") == 0 && strcmp(decoded_command[1], "get") == 0) {
 		handle_config_get(result, decoded_command[2]);
@@ -295,7 +306,7 @@ int main(int argc, char *argv[]) {
 			
 			// this line doesn't block because there are incoming data
 			int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
-			printf("Accepted connection request from fd: %d\n", client_fd);
+			// printf("Accepted connection request from fd: %d\n", client_fd);
 
 			if (!add_to_fds(client_fd)) {
 				printf("Too many fds: %s \n", strerror(errno));
