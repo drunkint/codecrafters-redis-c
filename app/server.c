@@ -9,16 +9,18 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <poll.h>
-// #include "hash.h"
+#include "hash.h"
 #include "timer.h"
-#include "rdb.h"
+// #include "rdb.h"
 #include "format.h"
 
 #define MAX_NUM_ARGUMENTS 8
 #define MAX_NUM_FDS 10
+#define INITIAL_TABLE_SIZE 4
+
 
 // system wide variables
-HashEntry hashtable[HASH_NUM];										// stores (key, value) and expiry date
+HashTable* ht;																		// stores (key, value) and expiry date
 struct pollfd fds[MAX_NUM_FDS];										// list of fds we can use.
 char results[MAX_NUM_FDS][BUFFER_SIZE];						// for storing results to pass back to fds.
 
@@ -55,6 +57,7 @@ bool handle_arguments(int argc, char* argv[]) {
 }
 
 bool handle_set(char* result, char* key, char* value, char* flag, char* arg) {
+	// preprocess expiry time
 	unsigned long expiry_time = 0;
 	if (strcmp(flag, "px") == 0) {
 		unsigned long expiry_interval = (unsigned long)atoi(arg);
@@ -63,22 +66,20 @@ bool handle_set(char* result, char* key, char* value, char* flag, char* arg) {
 		}
 		expiry_time = expiry_interval + get_time_in_ms();
 	}
+	// printf("in handle set, expiry_time is: %d\n", expiry_time);
 
-	printf("in handle set, expiry_time is: %d\n", expiry_time);
 
-	if (!hashtable_set(hashtable, TYPE_STRING, key, value, expiry_time)) {
-		get_simple_string(result, "ERROR-SET");
-		return false;
-	}
+	ht_set(ht, key, value, TYPE_STRING, expiry_time);
+	ht = ht_handle_resizing(ht);
+	ht_print(ht);
 
-	hashtable_print(hashtable);
 
 	get_simple_string(result, "OK");
 	return true;
 }
 
 bool handle_get(char* result, char* key) {
-	char* value = hashtable_get(hashtable, key);
+	char* value = ht_get(ht, key);
 	get_bulk_string(result, value);
 	return true;
 }
@@ -101,28 +102,28 @@ bool handle_config_get(char* result, char* raw_name) {
 }
 
 bool handle_keys(char* result, char* pattern) {
-	char raw_result[HASH_NUM][MAX_ARGUMENT_LENGTH] = {0};
-	char result_before_formatting[HASH_NUM][MAX_ARGUMENT_LENGTH] = {0};
-	// printf("pattern: %s\n", pattern);
+	// char raw_result[HASH_NUM][MAX_ARGUMENT_LENGTH] = {0};
+	// char result_before_formatting[HASH_NUM][MAX_ARGUMENT_LENGTH] = {0};
+	// // printf("pattern: %s\n", pattern);
 
-	// check if pattern is *. Only supports * at this time.
-	if (pattern[0] == '*') {
-		int key_num = hashtable_get_all_keys(hashtable, raw_result);
-		for (int i = 0; i < key_num; i++) {
-			char temp[MAX_ARGUMENT_LENGTH] = {0};
-			printf("key[%d]: %s\n", i, raw_result);
-			get_bulk_string(result_before_formatting[i], raw_result[i]);
-		}
-		get_resp_array(result, result_before_formatting, key_num);
-		return true;
-	}
+	// // check if pattern is *. Only supports * at this time.
+	// if (pattern[0] == '*') {
+	// 	int key_num = hashtable_get_all_keys(hashtable, raw_result);
+	// 	for (int i = 0; i < key_num; i++) {
+	// 		char temp[MAX_ARGUMENT_LENGTH] = {0};
+	// 		printf("key[%d]: %s\n", i, raw_result);
+	// 		get_bulk_string(result_before_formatting[i], raw_result[i]);
+	// 	}
+	// 	get_resp_array(result, result_before_formatting, key_num);
+	// 	return true;
+	// }
 	return false;
 }
 
 bool handle_type(char* result, char* key) {
-	char raw_result[BUFFER_SIZE];
-	hashtable_get_type(hashtable, raw_result, key);
-	get_simple_string(result, raw_result);
+	// char raw_result[BUFFER_SIZE];
+	// hashtable_get_type(hashtable, raw_result, key);
+	// get_simple_string(result, raw_result);
 	return true;
 }
 
@@ -142,6 +143,8 @@ int parse_command_from_client(char* result, char* command) {
 	char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH];
 	memset(decoded_command, '\0', MAX_NUM_ARGUMENTS * MAX_ARGUMENT_LENGTH);
 	
+	printf("decoded command: ");
+
 	char* cur = strchr(command, '\n') + 1;
 	for (int i = 0; i < resp_array_length; i++) {
 		if (cur[0] != '$') {
@@ -163,10 +166,13 @@ int parse_command_from_client(char* result, char* command) {
 		if (!is_digit(decoded_command[i][0])) {
 			modify_to_lower(decoded_command[i]);
 		}
-		printf("decoded_command[%d]: %s\n", i, decoded_command[i]);
+		printf("%d: %s, ", i, decoded_command[i]);
 
 		cur = strchr(cur, '\n') + 1; // skip <data>\r\n
 	}
+
+	printf("\n");
+	
 
 	// printf("decoded_command[0]: %s\n", decoded_command[0]);
 	if (strcmp(decoded_command[0], "ping") == 0) {
@@ -205,15 +211,15 @@ int main(int argc, char *argv[]) {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	printf("Logs from your program will appear here!\n");
 
-	hashtable_init(hashtable);
+	ht = ht_create_table(INITIAL_TABLE_SIZE);
 	handle_arguments(argc, argv);
-	if (strlen(dir) > 0 || strlen(db_filename) > 0) {
-		char db_complete_filename[MAX_ARGUMENT_LENGTH];
-		sprintf(db_complete_filename, "%s/%s", dir, db_filename);
+	// if (strlen(dir) > 0 || strlen(db_filename) > 0) {
+	// 	char db_complete_filename[MAX_ARGUMENT_LENGTH];
+	// 	sprintf(db_complete_filename, "%s/%s", dir, db_filename);
 
-		load_from_rdb_file(hashtable, db_complete_filename);
-		hashtable_print(hashtable);
-	}
+	// 	load_from_rdb_file(hashtable, db_complete_filename);
+	// 	hashtable_print(hashtable);
+	// }
 	
 	int server_fd, client_addr_len;
 	struct sockaddr_in client_addr;
