@@ -13,6 +13,7 @@
 #include "timer.h"
 #include "rdb.h"
 #include "format.h"
+// #include "radix-trie.h"
 
 #define MAX_NUM_ARGUMENTS 8
 #define MAX_NUM_FDS 10
@@ -139,9 +140,29 @@ bool handle_keys(char* result, char* pattern) {
 }
 
 bool handle_type(char* result, char* key) {
-	// char raw_result[BUFFER_SIZE];
-	// hashtable_get_type(hashtable, raw_result, key);
-	// get_simple_string(result, raw_result);
+	char raw_result[BUFFER_SIZE];
+
+	Type type = ht_get_type(ht, key);
+	get_type_string(raw_result, type);
+
+	get_simple_string(result, raw_result);
+	return true;
+}
+
+bool handle_xadd(char* result, char* stream_key, char* id, char* key, char* value) {
+	if (stream_key == NULL || id == NULL || key == NULL || value == NULL) {
+		get_bulk_string(result, "UH-OH");
+		return false;
+	}
+
+	HashEntry* entry = ht_get_entry(ht, stream_key);
+	if (entry == NULL) {
+		entry = ht_set(ht, stream_key, "", TYPE_STREAM, 0);
+		entry->stream = rn_create("");
+	}
+	rn_insert(entry->stream, id, key, value);
+
+	get_bulk_string(result, id);
 	return true;
 }
 
@@ -220,6 +241,9 @@ int parse_command_from_client(char* result, char* command) {
 	} else if (strcmp(decoded_command[0], "type") == 0) {
 		handle_type(result, decoded_command[1]);
 		return 0;
+	} else if (strcmp(decoded_command[0], "xadd") == 0) {
+		handle_xadd(result, decoded_command[1], decoded_command[2], decoded_command[3], decoded_command[4]);
+		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
 		return 0;
@@ -234,6 +258,7 @@ int main(int argc, char *argv[]) {
 	
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	printf("Logs from your program will appear here!\n");
+
 
 	ht = ht_create_table(INITIAL_TABLE_SIZE);
 	handle_arguments(argc, argv);

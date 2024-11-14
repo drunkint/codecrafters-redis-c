@@ -209,7 +209,7 @@ HashTable* ht_resize(HashTable* src_ht, bool is_up) {
   return dest_ht;
 }
 
-// upper limit: 3/4 of size or 1 of size
+// upper limit: 1 of size
 // lower limit: 1/8 of size
 HashTable* ht_handle_resizing(HashTable* ht) {
   // unsigned long upper_limit = (ht->table_size / (unsigned long) 4) * (unsigned long) 3;
@@ -227,7 +227,8 @@ HashTable* ht_handle_resizing(HashTable* ht) {
   return ht; // table didn't change
 }
 
-void ht_set(HashTable* ht, const char* key, const char* value, Type value_type, unsigned long expiry_time) {
+// returns the newly created hash entry
+HashEntry* ht_set(HashTable* ht, const char* key, const char* value, Type value_type, unsigned long expiry_time) {
   unsigned long index = hash_func_djb2(key, ht->table_size);
   HashEntry* cur = &ht->ht[index];
   HashEntry* prev = NULL;       // only used when chaining a new hash_entry
@@ -237,14 +238,14 @@ void ht_set(HashTable* ht, const char* key, const char* value, Type value_type, 
     if (key_should_be_added_to_existing_hash_entry(cur, key)) {
       hash_entry_assign(cur, key, value, value_type, expiry_time, cur->next, is_first_in_chain);
       ht->num_of_elements++;
-      return;
+      return cur;
     }
 
     if (key_should_be_replaced_in_existing_hash_entry(cur, key)) {
       hash_entry_assign(cur, key, value, value_type, expiry_time, cur->next, is_first_in_chain);
       // printf("%s vs %s\n", cur->key, key);
       // printf("-num of elem: %d\n", ht->num_of_elements);
-      return;
+      return cur;
     }
 
     prev = cur;       // only used when chaining a new hash_entry
@@ -258,7 +259,7 @@ void ht_set(HashTable* ht, const char* key, const char* value, Type value_type, 
   ht->num_of_elements++;
   // printf("--num of elem: %d\n", ht->num_of_elements);
 
-  return;
+  return cur;
   
 }
 
@@ -340,7 +341,6 @@ char** ht_get_keys(const HashTable* hash_table, const char* pattern) {
   HashEntry* ht = hash_table->ht;
 
   char** result = calloc(hash_table->num_of_elements, sizeof(char*));
-
   int result_counter = 0;
   for (int i = 0; i < hash_table->table_size; i++) {
     char type_temp[10] = {0};
