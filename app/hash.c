@@ -319,6 +319,9 @@ void ht_print(HashTable* hash_table) {
     if (ht[i].type != TYPE_NONE) {
       get_type_string(type_temp, ht[i].type);
       printf("%d: (%s, %s), type %s, expire %lu ", i, ht[i].key, ht[i].value, type_temp, ht[i].expiry_time);
+      if (ht[i].type == TYPE_STREAM) {
+        rn_print(ht[i].stream);
+      }
     }
     HashEntry* cur = ht[i].next;
     while(cur != NULL) {
@@ -329,6 +332,9 @@ void ht_print(HashTable* hash_table) {
 
       get_type_string(type_temp, cur->type);
       printf("-> %d: (%s, %s), type %s, expire %lu ", i, cur->key, cur->value, type_temp, cur->expiry_time);
+      if (ht[i].type == TYPE_STREAM) {
+        rn_print(ht[i].stream);
+      }
       cur = cur->next;
     }
     if (ht[i].type != TYPE_NONE) {

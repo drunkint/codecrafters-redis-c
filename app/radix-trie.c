@@ -145,6 +145,16 @@ void rn_insert(RadixNode* root, char* id, char* key, char* value) {
   rn->data = rd_insert_ll(rn->data, rd);
 }
 
+char* rn_get_latest_key(RadixNode* root) {
+  char* buffer = calloc(ID_LENGTH, sizeof(char));
+  RadixNode* cur = root;
+  while(cur->next_child_index > 0) {
+    cur = cur->children[cur->next_child_index - 1];
+    strcat(buffer, cur->key);
+  }
+  return buffer;
+}
+
 void rn_print(RadixNode* rn) {
   printf("(%s)", rn->key);
   for (int i = 0; i < rn->next_child_index; i++) {

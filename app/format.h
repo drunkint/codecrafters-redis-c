@@ -10,3 +10,4 @@ void get_bulk_string(char* dest, char* src);
 void get_simple_string(char* dest, char* src);
 void get_resp_array(char* dest, char src[][MAX_ARGUMENT_LENGTH], int number_of_elements);
 void get_resp_array_pointer(char* dest, char** src, int number_of_elements);
+void get_simple_error(char* dest, char* prefix, char* msg);

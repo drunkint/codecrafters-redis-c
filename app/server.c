@@ -156,14 +156,33 @@ bool handle_xadd(char* result, char* stream_key, char* id, char* key, char* valu
 	}
 
 	HashEntry* entry = ht_get_entry(ht, stream_key);
+	
+	if (strcmp(id, "0-0") <= 0) {
+		get_simple_error(result, "ERR", "The ID specified in XADD must be greater than 0-0");
+		return false;
+	}
+	// create stream if stream key doesn't exist
 	if (entry == NULL) {
 		entry = ht_set(ht, stream_key, "", TYPE_STREAM, 0);
 		entry->stream = rn_create("");
+	} else {
+		char* latest_key = rn_get_latest_key(entry->stream);
+		if (strcmp(id, latest_key) <= 0 ) {
+			get_simple_error(result, "ERR", "The ID specified in XADD is equal or smaller than the target stream top item");
+			return false;
+		}
+		
+		free(latest_key);
 	}
 	rn_insert(entry->stream, id, key, value);
 
 	get_bulk_string(result, id);
 	return true;
+}
+
+bool handle_print(char* result) {
+	ht_print(ht);
+	get_simple_string(result, "OK");
 }
 
 // command is a RESP array of bulk strings
@@ -243,6 +262,9 @@ int parse_command_from_client(char* result, char* command) {
 		return 0;
 	} else if (strcmp(decoded_command[0], "xadd") == 0) {
 		handle_xadd(result, decoded_command[1], decoded_command[2], decoded_command[3], decoded_command[4]);
+		return 0;
+	} else if (strcmp(decoded_command[0], "print") == 0) {
+		handle_print(result);
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");

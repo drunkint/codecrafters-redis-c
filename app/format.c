@@ -59,3 +59,8 @@ void get_resp_array_pointer(char* dest, char** src, int number_of_elements) {
 	}
 	sprintf(dest, "*%d\r\n%s", number_of_elements, consecutive_elements);
 }
+
+
+void get_simple_error(char* dest, char* prefix, char* msg) {
+	sprintf(dest, "-%s %s\r\n", prefix, msg);
+}
