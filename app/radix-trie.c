@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "radix-trie.h"
+#include "format.h"
 
 #define pass (void)0
 
@@ -155,6 +156,58 @@ char* rn_get_latest_key(RadixNode* root) {
   return buffer;
 }
 
+// assumes id is valid
+int get_time_part(char* id) {
+  char* c_time = substr(id, 0, strstr(id, "-") - id);
+  int time = atoi(c_time);
+  free(c_time);
+  return time;
+}
+
+// assumes id is valid
+int get_seq_part(char* id) {
+  return atoi(strstr(id, "-") + 1);
+}
+
+// assumes time part: xxxx-*
+char* rn_partially_generate_key(RadixNode* root, char* key) {
+  // compare the front len-2 characters. if equal, *++. if bigger
+
+  char* result = calloc(strlen(key) + 2, sizeof(char));
+
+  char* latest_key = rn_get_latest_key(root);
+  if (latest_key == NULL || strlen(latest_key) == 0) {
+    strcpy(result, key);
+    result[strlen(key) - 1] = get_time_part(key) == 0 ? '1' : '0';
+    latest_key != NULL ? free(latest_key) : pass;
+    return result;
+  }
+
+  int latest_key_time = get_time_part(latest_key);
+  int key_time = get_time_part(key);
+  if (latest_key_time == key_time) {
+    int seq_part = get_seq_part(latest_key) + 1;
+    sprintf(result, "%d-%d", key_time, seq_part);
+
+    latest_key != NULL ? free(latest_key) : pass;
+    return result;
+  }
+
+  if (latest_key_time > key_time) {
+
+    latest_key != NULL ? free(latest_key) : pass;
+    return NULL;
+  }
+
+  if (latest_key_time < key_time) {
+    strcpy(result, key);
+    result[strlen(result) - 1] = get_time_part(key) == 0 ? '1' : '0';
+    latest_key != NULL ? free(latest_key) : pass;
+    return result;
+  }
+
+}
+
 void rn_print(RadixNode* rn) {
   printf("(%s)", rn->key);
   for (int i = 0; i < rn->next_child_index; i++) {
@@ -163,3 +216,31 @@ void rn_print(RadixNode* rn) {
     printf("]");
   }
 }
+
+
+
+// Functions related to ID
+
+// true if id is correct, false o/w
+bool check_stream_id(char* result, char* id) {
+  // check all times
+	if (strstr(id, "-") == NULL) {
+		get_simple_error(result, "ERR", "The ID specified in XADD must include '-'");
+		return false;
+	}
+
+  // only check when partial generation
+  if (strstr(id,"-*") != NULL && strstr(id,"-*") == id) {
+    get_simple_error(result, "ERR", "The ID specified in XADD must have a time part");
+		return false;
+  }
+
+  // only check at explicit generation
+	if (strstr(id,"*") == NULL && strcmp(id, "0-0") <= 0) {
+		get_simple_error(result, "ERR", "The ID specified in XADD must be greater than 0-0");
+		return false;
+	}
+
+	return true;
+}
+

@@ -156,28 +156,45 @@ bool handle_xadd(char* result, char* stream_key, char* id, char* key, char* valu
 	}
 
 	HashEntry* entry = ht_get_entry(ht, stream_key);
-	
-	if (strcmp(id, "0-0") <= 0) {
-		get_simple_error(result, "ERR", "The ID specified in XADD must be greater than 0-0");
+
+
+	if (!check_stream_id(result, id)) {
 		return false;
 	}
+
+	// explicitly use ID. No generation.
 	// create stream if stream key doesn't exist
 	if (entry == NULL) {
 		entry = ht_set(ht, stream_key, "", TYPE_STREAM, 0);
 		entry->stream = rn_create("");
 	} else {
 		char* latest_key = rn_get_latest_key(entry->stream);
-		if (strcmp(id, latest_key) <= 0 ) {
+		if (strcmp(id, latest_key) <= 0 && strstr(id, "*") == NULL) {
 			get_simple_error(result, "ERR", "The ID specified in XADD is equal or smaller than the target stream top item");
+			free(latest_key);
 			return false;
 		}
 		
 		free(latest_key);
 	}
-	rn_insert(entry->stream, id, key, value);
 
-	get_bulk_string(result, id);
-	return true;
+	if (strstr(id, "*") == NULL) {
+		rn_insert(entry->stream, id, key, value);
+		get_bulk_string(result, id);
+		return true;
+	}
+
+	// partially generate ID when needed
+	if (strstr(id, "-*") != NULL) {
+		id = rn_partially_generate_key(entry->stream, id);
+		rn_insert(entry->stream, id, key, value);
+		get_bulk_string(result, id);
+		free(id);
+		return true;
+	}
+
+	return false;
+
 }
 
 bool handle_print(char* result) {
