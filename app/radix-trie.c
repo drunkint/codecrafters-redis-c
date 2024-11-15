@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include "radix-trie.h"
 #include "format.h"
+#include "timer.h"
 
 #define pass (void)0
 
@@ -208,6 +209,14 @@ char* rn_partially_generate_key(RadixNode* root, char* key) {
 
 }
 
+char* rn_generate_key(RadixNode* root) {
+  unsigned long cur_time = get_time_in_ms();
+  char buffer[35] = {0};
+  sprintf(buffer, "%lu-*", cur_time);
+  char* result = rn_partially_generate_key(root, buffer);
+  return result;
+}
+
 void rn_print(RadixNode* rn) {
   printf("(%s)", rn->key);
   for (int i = 0; i < rn->next_child_index; i++) {
@@ -223,9 +232,9 @@ void rn_print(RadixNode* rn) {
 
 // true if id is correct, false o/w
 bool check_stream_id(char* result, char* id) {
-  // check all times
-	if (strstr(id, "-") == NULL) {
-		get_simple_error(result, "ERR", "The ID specified in XADD must include '-'");
+  // only check when partial or explicit generation
+	if (strstr(id, "*") == NULL && strstr(id, "-") == NULL) {
+		get_simple_error(result, "ERR", "The ID specified in XADD must include '-' or '*'");
 		return false;
 	}
 

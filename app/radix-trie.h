@@ -34,3 +34,4 @@ char* rn_get_latest_key(RadixNode* root);
 void rn_print(RadixNode* rn);
 bool check_stream_id(char* result, char* id);
 char* rn_partially_generate_key(RadixNode* root, char* key);
+char* rn_generate_key(RadixNode* root);

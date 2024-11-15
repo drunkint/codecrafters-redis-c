@@ -193,7 +193,11 @@ bool handle_xadd(char* result, char* stream_key, char* id, char* key, char* valu
 		return true;
 	}
 
-	return false;
+	id = rn_generate_key(entry->stream);
+	rn_insert(entry->stream, id, key, value);
+	get_bulk_string(result, id);
+	free(id);
+	return true;
 
 }
 
