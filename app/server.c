@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <poll.h>
+#include <limits.h>
 // #include "hash.h"
 #include "timer.h"
 #include "rdb.h"
@@ -206,6 +207,35 @@ bool handle_print(char* result) {
 	get_simple_string(result, "OK");
 }
 
+bool handle_xrange(char* result, char* stream_key, char* id_start, char* id_end) {
+	// preprocess id_start
+	if (strchr(id_start, '-') == NULL) {
+		char temp[MAX_ARGUMENT_LENGTH] = {0};
+		strcpy(temp, id_start);
+		sprintf(id_start, "%s-%lu", temp, 0);
+	}
+
+	// preprocess id_end
+	if (strchr(id_end, '-') == NULL) {
+		char temp[MAX_ARGUMENT_LENGTH] = {0};
+		strcpy(temp, id_end);
+		sprintf(id_end, "%s-%lu", temp, ULONG_MAX);
+	}
+
+	HashEntry* entry = ht_get_entry(ht, stream_key);
+	if (entry == NULL) {
+		get_resp_array(result, NULL, 0);
+		return true;
+	}
+
+	RadixNode* acc_rn[MAX_RADIX_NODES] = {0};
+	char* acc_id[MAX_RADIX_NODES] = {0};
+	int num_rn = rn_traverse(entry->stream, id_start, id_end, acc_rn, acc_id);
+	format_radix(acc_rn, acc_id, num_rn, result);
+	return true;
+	
+}
+
 // command is a RESP array of bulk strings
 // RESP array are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
 // bulk strings are encoded as: $<length>\r\n<data>\r\n
@@ -286,6 +316,9 @@ int parse_command_from_client(char* result, char* command) {
 		return 0;
 	} else if (strcmp(decoded_command[0], "print") == 0) {
 		handle_print(result);
+		return 0;
+	} else if (strcmp(decoded_command[0], "xrange") == 0) {
+		handle_xrange(result, decoded_command[1], decoded_command[2], decoded_command[3]);
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");

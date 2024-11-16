@@ -65,7 +65,7 @@ RadixNode* rn_create(char* prefix) {
   rn->key = calloc(strlen(prefix) + 1, sizeof(char));
   strcpy(rn->key, prefix);
 
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 11; i++) {
     rn->children[i] = NULL;
   }
 
@@ -78,7 +78,11 @@ RadixNode* rn_create(char* prefix) {
 RadixData* rd_create(char* key, char* value) {
   RadixData* rd = calloc(1, sizeof(RadixData));
   rd->key = calloc(strlen(key) + 1, sizeof(char));
+  strcpy(rd->key, key);
+
   rd->value = calloc(strlen(value) + 1, sizeof(char));
+  strcpy(rd->value, value);
+
   rd->next = NULL;
 
   return rd;
@@ -158,16 +162,16 @@ char* rn_get_latest_key(RadixNode* root) {
 }
 
 // assumes id is valid
-int get_time_part(char* id) {
+unsigned long get_time_part(char* id) {
   char* c_time = substr(id, 0, strstr(id, "-") - id);
-  int time = atoi(c_time);
+  unsigned long time = (unsigned long) atoll(c_time);
   free(c_time);
   return time;
 }
 
 // assumes id is valid
-int get_seq_part(char* id) {
-  return atoi(strstr(id, "-") + 1);
+unsigned long get_seq_part(char* id) {
+  return (unsigned long) atoi(strstr(id, "-") + 1);
 }
 
 // assumes time part: xxxx-*
@@ -184,8 +188,8 @@ char* rn_partially_generate_key(RadixNode* root, char* key) {
     return result;
   }
 
-  int latest_key_time = get_time_part(latest_key);
-  int key_time = get_time_part(key);
+  unsigned long latest_key_time = get_time_part(latest_key);
+  unsigned long key_time = get_time_part(key);
   if (latest_key_time == key_time) {
     int seq_part = get_seq_part(latest_key) + 1;
     sprintf(result, "%d-%d", key_time, seq_part);
@@ -226,6 +230,52 @@ void rn_print(RadixNode* rn) {
   }
 }
 
+void rn_traverse_in_children_of(RadixNode* root, RadixNode* acc[MAX_RADIX_NODES], char* acc_id[MAX_RADIX_NODES],
+                                 int* acc_index, char* buffer, char* start, char* end) {
+  char cur[ID_LENGTH] = {0};
+  sprintf(cur, "%s%s", buffer, root->key);
+  // printf("cur: %s, %d, %d\n", cur, strncmp(start, cur, strlen(cur)) > 0, strncmp(end, cur, strlen(cur)) < 0);
+
+  if (strlen(root->key) > 0 && (strncmp(start, cur, strlen(cur)) > 0 || strncmp(end, cur, strlen(cur)) < 0)) {
+    return;
+  }
+
+  // printf("-pass\n");
+
+  if (root->next_child_index == 0) {
+    // printf("--adding");
+    acc_id[*acc_index] = calloc(strlen(cur) + 1, sizeof(char));
+    strcpy(acc_id[*acc_index], cur);
+
+    acc[*acc_index] = root;
+
+    (*acc_index)++;
+    return;
+  }
+  
+
+  // printf("-acc_index: %d\n", *acc_index);
+
+
+  for (int i = 0; i < root->next_child_index; i++) {
+    rn_traverse_in_children_of(root->children[i], acc, acc_id, acc_index, cur, start, end);
+  }
+}
+
+// return number of items found
+int rn_traverse(RadixNode* root, char* start, char* end, RadixNode *acc[MAX_RADIX_NODES], char* acc_id[MAX_RADIX_NODES]) {
+  memset(acc, '\0', MAX_RADIX_NODES);
+  memset(acc_id, '\0', MAX_RADIX_NODES);
+
+  char buffer[ID_LENGTH] = {0};
+  int index = 0;
+  // printf("start\n");
+  rn_traverse_in_children_of(root, acc, acc_id, &index, buffer, start, end);
+  printf("End of traverse. items found: %d\n", index);
+
+  return index;
+
+}
 
 
 // Functions related to ID
@@ -253,3 +303,65 @@ bool check_stream_id(char* result, char* id) {
 	return true;
 }
 
+void free_strings(char** src, int length) {
+	for (int i = 0; i < length; i++) {
+		src[i] != NULL ? free(src[i]) : pass;
+	}
+	src != NULL ? free(src) : pass;
+}	
+
+// traverses through the ll
+// returns a resp list, with radix data as its entries
+char* format_radix_data(RadixData* rd_head) {
+  char* acc[2 * MAX_RADIX_DATA] = {0};
+  int index = 0;
+
+  while (rd_head != NULL) {
+    acc[index] = calloc(strlen(rd_head->key) + 1, sizeof(char));
+    get_bulk_string(acc[index++], rd_head->key);
+
+    acc[index] = calloc(strlen(rd_head->value) + 1, sizeof(char));
+    get_bulk_string(acc[index++], rd_head->value);
+
+    rd_head = rd_head->next;
+  }
+
+  char* result = calloc(MAX_ARGUMENT_LENGTH, sizeof(char));
+
+  get_resp_array_pointer(result, acc, index);
+
+  for (int i = 0; i < index; i++) {
+    free(acc[i]);
+  }
+  printf("%d, result: %s\n", index, result);
+
+  return result;
+}
+
+char* format_radix(RadixNode* rn[], char* acc_id[], int length, char* result) {
+
+  char** result_arr = calloc(length, sizeof(char*));
+  for (int i = 0; i < length; i++) {    
+    char* rd = format_radix_data(rn[i]->data);
+    // printf("- rd: %s\n", rd);
+
+    char* input[2] = {0};
+
+    input[0] = calloc(ID_LENGTH + 10, sizeof(char));
+    get_bulk_string(input[0], acc_id[i]);
+
+    input[1] = rd;
+
+    result_arr[i] = calloc(MAX_ARGUMENT_LENGTH, sizeof(char));
+    get_resp_array_pointer(result_arr[i], input, 2);
+
+    free(input[0]);
+    free(rd);
+
+  }
+
+  get_resp_array_pointer(result, result_arr, length);
+  printf("! starting to free strings\n");
+  free_strings(result_arr, length);
+  
+}

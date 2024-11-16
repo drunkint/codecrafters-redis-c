@@ -1,7 +1,7 @@
 #include <stdbool.h>
 
 #define BUFFER_SIZE 1024
-#define MAX_ARGUMENT_LENGTH 256
+#define MAX_ARGUMENT_LENGTH 128
 
 
 bool is_digit(char character);
