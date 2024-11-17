@@ -202,6 +202,46 @@ bool handle_xadd(char* result, char* stream_key, char* id, char* key, char* valu
 
 }
 
+// returns stream entries that are greater than start_id (exclusive)
+bool handle_xread(char* result, char* catagory, char* stream_key, char* id_start) {
+	if (strcmp(catagory, "streams") != 0) {
+		get_simple_error(result, "ERR", "XREAD does not accpet this type yet.");
+		return false;
+	}
+
+	char id_end[ID_LENGTH] = {0};
+	sprintf(id_end, "%lu-%lu", ULONG_MAX, ULONG_MAX);
+
+	HashEntry* entry = ht_get_entry(ht, stream_key);
+	if (entry == NULL) {
+		get_resp_array(result, NULL, 0);
+		return true;
+	}
+
+	RadixNode* acc_rn[MAX_RADIX_NODES] = {0};
+	char* acc_id[MAX_RADIX_NODES] = {0};
+	int num_rn = rn_traverse(entry->stream, id_start, id_end, acc_rn, acc_id);
+
+	char id_and_data_resp[BUFFER_SIZE] = {0};
+	format_radix(acc_rn, acc_id, num_rn, id_and_data_resp);
+
+	char stream_key_and_contents_resp[BUFFER_SIZE] = {0};
+	char* stream_key_and_contents_arr[2] = {0};
+	stream_key_and_contents_arr[0] = calloc(strlen(stream_key) + 10, sizeof(char));
+	get_bulk_string(stream_key_and_contents_arr[0], stream_key);
+	stream_key_and_contents_arr[1] = id_and_data_resp;
+	get_resp_array_pointer(stream_key_and_contents_resp, stream_key_and_contents_arr, 2);
+
+	char* streams[1] = {0};
+	streams[0] = stream_key_and_contents_resp;
+	get_resp_array_pointer(result, streams, 1);
+	printf("%s\n", result);
+
+	free(stream_key_and_contents_arr[0]);
+	return true;
+
+}
+
 bool handle_print(char* result) {
 	ht_print(ht);
 	get_simple_string(result, "OK");
@@ -323,6 +363,9 @@ int parse_command_from_client(char* result, char* command) {
 		return 0;
 	} else if (strcmp(decoded_command[0], "xrange") == 0) {
 		handle_xrange(result, decoded_command[1], decoded_command[2], decoded_command[3]);
+		return 0;
+	} else if (strcmp(decoded_command[0], "xread") == 0) {
+		handle_xread(result, decoded_command[1], decoded_command[2], decoded_command[3]);
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");

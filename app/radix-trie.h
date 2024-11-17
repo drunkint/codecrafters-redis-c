@@ -41,3 +41,4 @@ char* rn_generate_key(RadixNode* root);
 int rn_traverse(RadixNode* root, char* start, char* end, RadixNode *acc[MAX_RADIX_NODES], char* acc_id[MAX_RADIX_NODES]);
 char* format_radix_data(RadixData* rd_head);
 char* format_radix(RadixNode* rn[], char* acc_id[], int length, char* result);
+void increment_seq_part(char* dest, char* id);

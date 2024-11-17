@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
+
 #include "radix-trie.h"
 #include "format.h"
 #include "timer.h"
@@ -174,6 +176,18 @@ unsigned long get_seq_part(char* id) {
   return (unsigned long) atoi(strstr(id, "-") + 1);
 }
 
+void increment_seq_part(char* dest, char* id) {
+  unsigned long time_part = get_time_part(id);
+  unsigned long seq_part = get_seq_part(id);
+
+  if (seq_part == ULONG_MAX) {
+    sprintf(dest, "%lu-%lu", time_part + 1, 0);
+    return;
+  }
+
+  sprintf(dest, "%lu-%lu", time_part, seq_part + 1);
+}
+
 // assumes time part: xxxx-*
 char* rn_partially_generate_key(RadixNode* root, char* key) {
   // compare the front len-2 characters. if equal, *++. if bigger
@@ -191,8 +205,7 @@ char* rn_partially_generate_key(RadixNode* root, char* key) {
   unsigned long latest_key_time = get_time_part(latest_key);
   unsigned long key_time = get_time_part(key);
   if (latest_key_time == key_time) {
-    int seq_part = get_seq_part(latest_key) + 1;
-    sprintf(result, "%d-%d", key_time, seq_part);
+    increment_seq_part(result, latest_key);
 
     latest_key != NULL ? free(latest_key) : pass;
     return result;
@@ -317,23 +330,25 @@ char* format_radix_data(RadixData* rd_head) {
   int index = 0;
 
   while (rd_head != NULL) {
-    acc[index] = calloc(strlen(rd_head->key) + 1, sizeof(char));
+    acc[index] = calloc(strlen(rd_head->key) + 10, sizeof(char));
     get_bulk_string(acc[index++], rd_head->key);
 
-    acc[index] = calloc(strlen(rd_head->value) + 1, sizeof(char));
+    acc[index] = calloc(strlen(rd_head->value) + 10, sizeof(char));
     get_bulk_string(acc[index++], rd_head->value);
 
     rd_head = rd_head->next;
   }
+  // printf("inside format radix data\n");
 
   char* result = calloc(MAX_ARGUMENT_LENGTH, sizeof(char));
 
   get_resp_array_pointer(result, acc, index);
+  // printf("after resp array pointer\n");
+
 
   for (int i = 0; i < index; i++) {
     free(acc[i]);
   }
-  printf("%d, result: %s\n", index, result);
 
   return result;
 }
@@ -361,7 +376,6 @@ char* format_radix(RadixNode* rn[], char* acc_id[], int length, char* result) {
   }
 
   get_resp_array_pointer(result, result_arr, length);
-  printf("! starting to free strings\n");
   free_strings(result_arr, length);
   
 }
