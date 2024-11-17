@@ -203,16 +203,13 @@ bool handle_xadd(char* result, char* stream_key, char* id, char* key, char* valu
 }
 
 // returns stream entries that are greater than start_id (exclusive)
-bool handle_xread(char* result, char* catagory, char* stream_key, char* id_start) {
-	if (strcmp(catagory, "streams") != 0) {
-		get_simple_error(result, "ERR", "XREAD does not accpet this type yet.");
-		return false;
-	}
-
+// does not wrap the single stream with a list of length 1.
+// assumes category is stream
+bool handle_single_xread_no_wrap(char* result, char* stream_key, char* id_start) {
 	char id_end[ID_LENGTH] = {0};
 	sprintf(id_end, "%lu-%lu", ULONG_MAX, ULONG_MAX);
-
 	HashEntry* entry = ht_get_entry(ht, stream_key);
+
 	if (entry == NULL) {
 		get_resp_array(result, NULL, 0);
 		return true;
@@ -225,19 +222,44 @@ bool handle_xread(char* result, char* catagory, char* stream_key, char* id_start
 	char id_and_data_resp[BUFFER_SIZE] = {0};
 	format_radix(acc_rn, acc_id, num_rn, id_and_data_resp);
 
-	char stream_key_and_contents_resp[BUFFER_SIZE] = {0};
-	char* stream_key_and_contents_arr[2] = {0};
-	stream_key_and_contents_arr[0] = calloc(strlen(stream_key) + 10, sizeof(char));
-	get_bulk_string(stream_key_and_contents_arr[0], stream_key);
-	stream_key_and_contents_arr[1] = id_and_data_resp;
-	get_resp_array_pointer(stream_key_and_contents_resp, stream_key_and_contents_arr, 2);
+	char stream_resp[BUFFER_SIZE] = {0};
+	char* stream_arr[2] = {0};
+	stream_arr[0] = calloc(strlen(stream_key) + 10, sizeof(char));
+	get_bulk_string(stream_arr[0], stream_key);
+	stream_arr[1] = id_and_data_resp;
+	get_resp_array_pointer(result, stream_arr, 2);
 
-	char* streams[1] = {0};
-	streams[0] = stream_key_and_contents_resp;
-	get_resp_array_pointer(result, streams, 1);
-	printf("%s\n", result);
+	free(stream_arr[0]);
+	return true;
+}
 
-	free(stream_key_and_contents_arr[0]);
+bool handle_xread(char* result, char args[][MAX_ARGUMENT_LENGTH] ) {
+	char result_arr[MAX_NUM_ARGUMENTS / 2 + 1][MAX_ARGUMENT_LENGTH] = {0};
+	char* catagory = args[0];
+	char* stream_key[MAX_NUM_ARGUMENTS / 2 + 1] = {0};
+	char* id_start[MAX_NUM_ARGUMENTS / 2 + 1] = {0};
+	int arg_num = 0;
+	while(strlen(args[arg_num]) > 0) {
+		arg_num++;
+	}
+
+	int stream_num = arg_num / 2;
+
+	for (int i = 0; i < stream_num; i++) {
+		stream_key[i] = args[i + 1];
+		id_start[i] = args[stream_num + i + 1];
+		// printf("->%d stream, id_start: %s, %s\n", stream_num, stream_key[i], id_start[i]);
+	}
+
+	if (strcmp(catagory, "streams") != 0) {
+		get_simple_error(result, "ERR", "XREAD does not accpet this type yet.");
+		return false;
+	}
+
+	for (int i = 0; i < stream_num; i++) {
+		handle_single_xread_no_wrap(result_arr[i], stream_key[i], id_start[i]);
+	}
+	get_resp_array(result, result_arr, stream_num);
 	return true;
 
 }
@@ -365,7 +387,7 @@ int parse_command_from_client(char* result, char* command) {
 		handle_xrange(result, decoded_command[1], decoded_command[2], decoded_command[3]);
 		return 0;
 	} else if (strcmp(decoded_command[0], "xread") == 0) {
-		handle_xread(result, decoded_command[1], decoded_command[2], decoded_command[3]);
+		handle_xread(result, &decoded_command[1]);		// skipps "xread" itself
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
