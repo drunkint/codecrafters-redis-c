@@ -209,16 +209,18 @@ bool handle_print(char* result) {
 
 bool handle_xrange(char* result, char* stream_key, char* id_start, char* id_end) {
 	// preprocess id_start
-	if (strchr(id_start, '-') == NULL) {
+	if (strlen(id_start) == 1 && id_start[0] == '-') { // using - to indicate start
+		strcpy(id_start, "0-0");
+	} else if (strchr(id_start, '-') == NULL) {				// init id_start's seq num if not provided.
 		char temp[MAX_ARGUMENT_LENGTH] = {0};
 		strcpy(temp, id_start);
 		sprintf(id_start, "%s-%lu", temp, 0);
-	} else if (strlen(id_start) == 1 && id_start[0] == '-') {
-		strcpy(id_start, "0-0");
 	}
 
 	// preprocess id_end
-	if (strchr(id_end, '-') == NULL) {
+	if (strlen(id_end) == 1 && id_end[0] == '+') {	// using + to indicate end
+		sprintf(id_end, "%lu-%lu", ULONG_MAX, ULONG_MAX);
+	} else if (strchr(id_end, '-') == NULL) {				// if sequence num (as in <time>-<seq>) is not provided, id_end's seq num is set to its max
 		char temp[MAX_ARGUMENT_LENGTH] = {0};
 		strcpy(temp, id_end);
 		sprintf(id_end, "%s-%lu", temp, ULONG_MAX);
