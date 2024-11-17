@@ -213,6 +213,8 @@ bool handle_xrange(char* result, char* stream_key, char* id_start, char* id_end)
 		char temp[MAX_ARGUMENT_LENGTH] = {0};
 		strcpy(temp, id_start);
 		sprintf(id_start, "%s-%lu", temp, 0);
+	} else if (strlen(id_start) == 1 && id_start[0] == '-') {
+		strcpy(id_start, "0-0");
 	}
 
 	// preprocess id_end
