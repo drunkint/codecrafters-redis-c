@@ -15,6 +15,7 @@
 #include "rdb.h"
 #include "format.h"
 // #include "radix-trie.h"
+#include "queue.h"
 
 #define MAX_NUM_ARGUMENTS 8
 #define MAX_NUM_FDS 10
@@ -25,6 +26,8 @@
 HashTable* ht;																		// stores (key, value) and expiry date
 struct pollfd fds[MAX_NUM_FDS];										// list of fds we can use.
 char results[MAX_NUM_FDS][BUFFER_SIZE];						// for storing results to pass back to fds.
+
+Queue* eq;																				// event queue: stores async events.
 
 char dir[MAX_ARGUMENT_LENGTH] = {0};
 char db_filename[MAX_ARGUMENT_LENGTH] = {0};
@@ -202,22 +205,37 @@ bool handle_xadd(char* result, char* stream_key, char* id, char* key, char* valu
 
 }
 
-// returns stream entries that are greater than start_id (exclusive)
+// returns false if it's empty
+// gets stream entries that are greater than start_id (exclusive)
 // does not wrap the single stream with a list of length 1.
 // assumes category is stream
 bool handle_single_xread_no_wrap(char* result, char* stream_key, char* id_start) {
 	char id_end[ID_LENGTH] = {0};
 	sprintf(id_end, "%lu-%lu", ULONG_MAX, ULONG_MAX);
+	// printf("max id is %s\n", id_end);
 	HashEntry* entry = ht_get_entry(ht, stream_key);
 
 	if (entry == NULL) {
 		get_resp_array(result, NULL, 0);
-		return true;
+		return false;
 	}
+
+	char id_start_inclusive[ID_LENGTH] = {0};
+	increment_seq_part(id_start_inclusive, id_start);
+	// printf("new id start is %s\n", id_start_inclusive);
 
 	RadixNode* acc_rn[MAX_RADIX_NODES] = {0};
 	char* acc_id[MAX_RADIX_NODES] = {0};
-	int num_rn = rn_traverse(entry->stream, id_start, id_end, acc_rn, acc_id);
+	printf("! traversing %s [%s, %s]", entry->key, id_start_inclusive, id_end);
+	int num_rn = rn_traverse(entry->stream, id_start_inclusive, id_end, acc_rn, acc_id);
+	printf("resulting in %d items found\n", num_rn);
+	printf("printing radix tree");
+	rn_print(entry->stream->children[0]);
+
+	if (num_rn == 0) {
+		get_resp_array(result, NULL, 0);
+		return false;
+	}
 
 	char id_and_data_resp[BUFFER_SIZE] = {0};
 	format_radix(acc_rn, acc_id, num_rn, id_and_data_resp);
@@ -256,10 +274,16 @@ bool handle_xread(char* result, char args[][MAX_ARGUMENT_LENGTH] ) {
 		return false;
 	}
 
+	bool is_result_all_empty = true;
 	for (int i = 0; i < stream_num; i++) {
-		handle_single_xread_no_wrap(result_arr[i], stream_key[i], id_start[i]);
+		is_result_all_empty &= !handle_single_xread_no_wrap(result_arr[i], stream_key[i], id_start[i]);
 	}
-	get_resp_array(result, result_arr, stream_num);
+
+	if (is_result_all_empty) {
+		get_resp_array(result, NULL, -1);
+	} else {
+		get_resp_array(result, result_arr, stream_num);
+	}
 	return true;
 
 }
@@ -305,7 +329,7 @@ bool handle_xrange(char* result, char* stream_key, char* id_start, char* id_end)
 // command is a RESP array of bulk strings
 // RESP array are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
 // bulk strings are encoded as: $<length>\r\n<data>\r\n
-int parse_command_from_client(char* result, char* command) {
+int parse_command_from_client(char decoded_command[][MAX_ARGUMENT_LENGTH], char* command) {
 	if (!(strlen(command) >= 2 && command[0] == '*' && is_digit(command[1]))) {
 		printf("what is this: %c\n", command[0]);
 		printf("invalid RESP array: %s\n", command);
@@ -315,7 +339,6 @@ int parse_command_from_client(char* result, char* command) {
 	int resp_array_length = atoi(command);
 
 	// decoded_command[0] is the command name. The rest are its arguments.d
-	char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH];
 	memset(decoded_command, '\0', MAX_NUM_ARGUMENTS * MAX_ARGUMENT_LENGTH);
 	
 	printf("decoded command: ");
@@ -346,8 +369,12 @@ int parse_command_from_client(char* result, char* command) {
 		cur = strchr(cur, '\n') + 1; // skip <data>\r\n
 	}
 
-	printf("\n");
-	
+	printf("\n (received at %lu)\n", get_time_in_ms());
+
+}
+
+int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH]) {
+		// printf("-> handling %s at %lu\n", decoded_command[0], get_time_in_ms());
 
 	// printf("decoded_command[0]: %s\n", decoded_command[0]);
 	if (strcmp(decoded_command[0], "ping") == 0) {
@@ -393,7 +420,55 @@ int parse_command_from_client(char* result, char* command) {
 		strcpy(result, "+NotImplemented\r\n");
 		return 0;
 	}
+}
 
+bool is_command_blocking(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH]) {
+	for (int i = 0; i < MAX_NUM_ARGUMENTS; i++) {
+		if (strlen(decoded_command[i]) > 0 && strcmp(decoded_command[i], "block") == 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void handle_blocking_command(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH], int fd_index) {
+	// get the original command without block and the expiry time.
+	// decoded_command example: xread block 1000 streams some_key 1526985054069-0
+	if (strcmp(decoded_command[0], "xread") == 0 && strcmp(decoded_command[1], "block") == 0) {
+		unsigned long expiry_time = (unsigned long) atoll(decoded_command[2]) + get_time_in_ms();
+		strcpy(decoded_command[2], "xread");
+
+		// push to event queue.
+		q_add(eq, &decoded_command[2], 4, expiry_time, fd_index);
+		return;
+	}
+
+	printf("Error! Blocking (cmd: '%s') for the command '%s' is not supported.\n", decoded_command[1], decoded_command[0]);
+}
+
+void check_event_queue() {
+	// printf("-> checking queue at %lu\n", get_time_in_ms());
+	while (q_is_head_expired(eq)) {
+		
+		Event* e = q_pop_front(eq);
+		if (e == NULL) {
+			break;
+		}
+
+
+
+		// bad implementation but put here for now.
+		char temp[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH] = {0};
+		for (int i = 0; i < e->command_length; i++) {
+			strcpy(temp[i], e->command[i]);
+			printf("copied over: %s\n", temp[i]);
+		}
+		printf("-> handling %s at %lu\n", temp[0], get_time_in_ms());
+		handle_command(results[e->fd_index], temp);
+		fds[e->fd_index].events |= POLLOUT; 
+		
+		q_destroy_event(e);
+	}
 }
 
 int main(int argc, char *argv[]) {
@@ -404,7 +479,10 @@ int main(int argc, char *argv[]) {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	printf("Logs from your program will appear here!\n");
 
+	// create event queue
+	eq = q_init();
 
+	// create database (hashtable)
 	ht = ht_create_table(INITIAL_TABLE_SIZE);
 	handle_arguments(argc, argv);
 	if (strlen(dir) > 0 || strlen(db_filename) > 0) {
@@ -462,12 +540,17 @@ int main(int argc, char *argv[]) {
 
 	while(1) {
 		// poll() is the only blocking line of code 
-		int num_of_fds_with_event = poll(fds, MAX_NUM_FDS, -1);
+		int num_of_fds_with_event = poll(fds, MAX_NUM_FDS, 100);
 		// printf("num_of_fds_with_event: %d\n", num_of_fds_with_event);
 
 		if (num_of_fds_with_event < 0) {
 			printf("Poll failed: %s \n", strerror(errno));
 			return 1;
+		}
+
+		check_event_queue();
+		if (num_of_fds_with_event == 0) {
+			continue;
 		}
 
 		// checks if there's a new connection request
@@ -489,9 +572,10 @@ int main(int argc, char *argv[]) {
 			// if POLLIN is included in fds[i].revents (& is bitwise and)
 			// Note: fds[i].revents is populated by poll()
 			if (fds[i].fd != -1 && (fds[i].revents & POLLIN)) { 
-				char buffer[BUFFER_SIZE], result[BUFFER_SIZE];
+				char buffer[BUFFER_SIZE];
+				// char result[BUFFER_SIZE];
 				memset(buffer, '\0', BUFFER_SIZE);
-				memset(result, '\0', BUFFER_SIZE);				
+				// memset(result, '\0', BUFFER_SIZE);				
 
 				// this is not blocking because fds[i].revents includes POLLIN in poll()
 				// this means there are data to read in the client fd
@@ -503,8 +587,17 @@ int main(int argc, char *argv[]) {
 					fds[i].fd = -1; 
 					memset(results[i], '\0', BUFFER_SIZE);
 				} else {
-					parse_command_from_client(result, buffer);
-					strcpy(results[i], result);
+					char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH] = {0};
+					parse_command_from_client(decoded_command, buffer);
+
+					// printf("hey\n");
+					if (is_command_blocking(decoded_command)) {
+						handle_blocking_command(decoded_command, i);
+						continue;
+					}
+
+					handle_command(results[i], decoded_command);
+					// strcpy(results[i], result);
 					fds[i].events |= POLLOUT; 
 				}
 			}

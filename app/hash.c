@@ -268,7 +268,7 @@ HashEntry* ht_get_entry_ignore_expiry(HashTable* ht, const char* key) {
   HashEntry* cur = &ht->ht[index];
 
   while(cur != NULL && cur->type != TYPE_NONE) {
-    printf("cur.key, key = %s, %s\n", cur->key, key);
+    // printf("cur.key, key = %s, %s\n", cur->key, key);
     if (strcmp(cur->key, key) == 0) {
       return cur;
     }

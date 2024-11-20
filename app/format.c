@@ -34,7 +34,18 @@ void get_simple_string(char* dest, char* src) {
 
 // RESP arrays are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
 // Assumption: each element in src is encoded
+// if number_of_elemnts is -1, it's a null bulck string
 void get_resp_array(char* dest, char src[][MAX_ARGUMENT_LENGTH], int number_of_elements) {
+	if (number_of_elements == -1) {
+		strcpy(dest, "*-1\r\n");
+		return;
+	}
+	
+	if (number_of_elements == 0) {
+		strcpy(dest, "*0\r\n");
+		return;
+	}
+
 	char consecutive_elements[BUFFER_SIZE];
 	memset(consecutive_elements, '\0', BUFFER_SIZE);
 	// printf("resp start\n");
@@ -50,6 +61,11 @@ void get_resp_array(char* dest, char src[][MAX_ARGUMENT_LENGTH], int number_of_e
 // RESP arrays are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
 // Assumption: each element in src is encoded
 void get_resp_array_pointer(char* dest, char** src, int number_of_elements) {
+	if (number_of_elements == -1) {
+		strcpy(dest, "*-1\r\n");
+		return;
+	}
+
 	if (number_of_elements == 0) {
 		strcpy(dest, "*0\r\n");
 		return;

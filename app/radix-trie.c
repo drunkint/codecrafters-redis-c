@@ -284,7 +284,7 @@ int rn_traverse(RadixNode* root, char* start, char* end, RadixNode *acc[MAX_RADI
   int index = 0;
   // printf("start\n");
   rn_traverse_in_children_of(root, acc, acc_id, &index, buffer, start, end);
-  printf("End of traverse. items found: %d\n", index);
+  // printf("End of traverse. items found: %d\n", index);
 
   return index;
 

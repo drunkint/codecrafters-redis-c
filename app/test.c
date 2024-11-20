@@ -12,10 +12,10 @@
 
 // int main() {
 //   RadixNode* root = rn_create("");
-//   RadixNode* n = rn_insert_in_children_of(root, "1234");
+//   RadixNode* n = rn_insert_in_children_of(root, "0-1");
 //   RadixData* rd_1 = rd_create("a", "aa");
 //   n->data = rd_1;
-//   // rn_insert_in_children_of(root, "1244");
+//   rn_insert_in_children_of(root, "0-2");
 //   // rn_insert_in_children_of(root, "1245");
 //   // RadixNode* n = rn_insert_in_children_of(root, "1246");
 
@@ -23,10 +23,10 @@
 //   char result[BUFFER_SIZE] = {0};
 //   RadixNode* acc_rn[MAX_RADIX_NODES] = {0};
 // 	char* acc_id[MAX_RADIX_NODES] = {0};
-// 	int num_rn = rn_traverse(root, "1234", "1245", acc_rn, acc_id);
+// 	int num_rn = rn_traverse(root, "0-3", "18446744073709551615-18446744073709551615", acc_rn, acc_id);
 //   format_radix(acc_rn, acc_id, num_rn, result);
 
-//   // rn_print(root);
+//   rn_print(root);
 //   printf("\n!!!result: %s\n", result);
 
 
