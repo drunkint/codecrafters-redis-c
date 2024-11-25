@@ -20,6 +20,7 @@
 #define MAX_NUM_ARGUMENTS 8
 #define MAX_NUM_FDS 10
 #define INITIAL_TABLE_SIZE 4
+#define pass (void)0
 
 
 // system wide variables
@@ -452,8 +453,34 @@ bool is_command_blocking(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LE
 	return false;
 }
 
+// only considers the dollar sign placeholder as in xread block 0 streams some_key $
+// in this case, replace $ with the latest key
+void preprocess_blocking_command(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH]) {
+	if (strcmp(decoded_command[0], "xread") == 0 && strlen(decoded_command[5]) == 1 && decoded_command[5][0] == '$') {
+		HashEntry* he = ht_get_entry(ht, decoded_command[4]);
+		if (he == NULL) {
+			strcpy(decoded_command[5], "0-0");
+			return;
+		}
+
+		char* latest_key = rn_get_latest_key(he->stream);
+		if (latest_key == NULL || strlen(latest_key) == 0) {
+			strcpy(decoded_command[5], "0-0");
+			latest_key != NULL ? free(latest_key) : pass;
+			return;
+		}
+
+		strcpy(decoded_command[5], latest_key);
+		free(latest_key);
+		return;
+	}
+}
+
 void handle_blocking_command(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH], int fd_index) {
 	unsigned long expiry_interval = atoll(decoded_command[2]);
+	unsigned long current_time = get_time_in_ms();
+	// preprocessing
+	preprocess_blocking_command(decoded_command);
 
 	// blocks until some other entry is added in this stream using XADD.
 	// decoded_command example: xread block 0 streams some_key 1526985054069-0
@@ -469,7 +496,7 @@ void handle_blocking_command(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMEN
 	// get the original command without block and the expiry time.
 	// decoded_command example: xread block 1000 streams some_key 1526985054069-0
 	if (strcmp(decoded_command[0], "xread") == 0 && strcmp(decoded_command[1], "block") == 0 && expiry_interval > 0) {
-		unsigned long expiry_time = (unsigned long) atoll(decoded_command[2]) + get_time_in_ms();
+		unsigned long expiry_time = expiry_interval + current_time;
 		strcpy(decoded_command[2], "xread");
 
 		// push to event queue.
