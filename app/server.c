@@ -27,7 +27,9 @@ HashTable* ht;																		// stores (key, value) and expiry date
 struct pollfd fds[MAX_NUM_FDS];										// list of fds we can use.
 char results[MAX_NUM_FDS][BUFFER_SIZE];						// for storing results to pass back to fds.
 
-Queue* eq;																				// event queue: stores async events.
+Queue* eq;																				// event queue: stores async events with timeout
+Queue* tq;																				// trigger queue: stores async events that will be triggered on some action.
+Queue* rq;																				// run queue: stores async events ready to be ran. Other queues will push their events here.
 
 char dir[MAX_ARGUMENT_LENGTH] = {0};
 char db_filename[MAX_ARGUMENT_LENGTH] = {0};
@@ -153,7 +155,8 @@ bool handle_type(char* result, char* key) {
 	return true;
 }
 
-bool handle_xadd(char* result, char* stream_key, char* id, char* key, char* value) {
+// handles xadd without considering checking the trigger queue.
+bool handle_xadd_without_tq(char* result, char* stream_key, char* id, char* key, char* value) {
 	if (stream_key == NULL || id == NULL || key == NULL || value == NULL) {
 		get_bulk_string(result, "UH-OH");
 		return false;
@@ -204,6 +207,24 @@ bool handle_xadd(char* result, char* stream_key, char* id, char* key, char* valu
 	return true;
 
 }
+
+void check_trigger_queue(char* keyword) {
+	// When event should be ran, we run it and make it dissapear from the tq.
+	Event* cur = NULL;
+
+	while ((cur = q_find_and_pop(tq, keyword)) != NULL) {
+		q_prepend(rq, cur);
+	}
+}
+
+bool handle_xadd(char* result, char* stream_key, char* id, char* key, char* value) {
+
+	if (handle_xadd_without_tq(result, stream_key, id, key, value)) {
+		check_trigger_queue(stream_key);
+	}
+	
+}
+
 
 // returns false if it's empty
 // gets stream entries that are greater than start_id (exclusive)
@@ -432,9 +453,22 @@ bool is_command_blocking(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LE
 }
 
 void handle_blocking_command(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH], int fd_index) {
+	unsigned long expiry_interval = atoll(decoded_command[2]);
+
+	// blocks until some other entry is added in this stream using XADD.
+	// decoded_command example: xread block 0 streams some_key 1526985054069-0
+	if (strcmp(decoded_command[0], "xread") == 0 && strcmp(decoded_command[1], "block") == 0 && expiry_interval == 0) {
+		strcpy(decoded_command[2], "xread");
+
+		// push to trigger queue
+		q_add(tq, &decoded_command[2], 4, 0, fd_index);
+		return;
+	}
+
+
 	// get the original command without block and the expiry time.
 	// decoded_command example: xread block 1000 streams some_key 1526985054069-0
-	if (strcmp(decoded_command[0], "xread") == 0 && strcmp(decoded_command[1], "block") == 0) {
+	if (strcmp(decoded_command[0], "xread") == 0 && strcmp(decoded_command[1], "block") == 0 && expiry_interval > 0) {
 		unsigned long expiry_time = (unsigned long) atoll(decoded_command[2]) + get_time_in_ms();
 		strcpy(decoded_command[2], "xread");
 
@@ -446,6 +480,7 @@ void handle_blocking_command(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMEN
 	printf("Error! Blocking (cmd: '%s') for the command '%s' is not supported.\n", decoded_command[1], decoded_command[0]);
 }
 
+// moves ready events to the ready queue.
 void check_event_queue() {
 	// printf("-> checking queue at %lu\n", get_time_in_ms());
 	while (q_is_head_expired(eq)) {
@@ -455,7 +490,17 @@ void check_event_queue() {
 			break;
 		}
 
+		// ready queue will be ran asyncly
+		q_prepend(rq, e);
+	}
+}
 
+void run_all_in_queue(Queue* q) {
+	Event* e;
+	while (e = q_pop_front(q)) {
+		if (e == NULL) {
+			break;
+		}
 
 		// bad implementation but put here for now.
 		char temp[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH] = {0};
@@ -463,7 +508,7 @@ void check_event_queue() {
 			strcpy(temp[i], e->command[i]);
 			printf("copied over: %s\n", temp[i]);
 		}
-		printf("-> handling %s at %lu\n", temp[0], get_time_in_ms());
+		// printf("-> handling %s at %lu\n", temp[0], get_time_in_ms());
 		handle_command(results[e->fd_index], temp);
 		fds[e->fd_index].events |= POLLOUT; 
 		
@@ -481,6 +526,8 @@ int main(int argc, char *argv[]) {
 
 	// create event queue
 	eq = q_init();
+	tq = q_init();
+	rq = q_init();
 
 	// create database (hashtable)
 	ht = ht_create_table(INITIAL_TABLE_SIZE);
@@ -549,6 +596,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		check_event_queue();
+		run_all_in_queue(rq);
 		if (num_of_fds_with_event == 0) {
 			continue;
 		}

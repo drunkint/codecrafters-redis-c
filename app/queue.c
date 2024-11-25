@@ -9,6 +9,7 @@ Queue* q_init() {
   q->head = NULL;
 }
 
+
 void q_add(Queue* q, char decoded_command[][MAX_ARGUMENT_LENGTH], int num_of_arg, unsigned long expiry_time, int fd_index) {
   // creating the queue node
   Event* e = calloc(1, sizeof(Event));
@@ -83,4 +84,49 @@ bool q_is_head_expired(Queue* q) {
     return false;
   }
   return q->head->expiry_time < get_time_in_ms();
+}
+
+
+void q_prepend(Queue* q, Event* e) {
+  if (q == NULL) {
+    q = q_init();
+    q->head = e;
+    return;
+  }
+
+  if (q->head == NULL) {
+    q->head = e;
+    return;
+  }
+
+  e->next = q->head;
+  q->head = e;
+  return;
+}
+
+Event* q_find_and_pop(Queue* q, char* command_keyword) {
+  if (q == NULL || q->head == NULL) {
+    return NULL;
+  }
+
+  Event* cur = q->head;
+  Event* prev = NULL;
+  while (cur != NULL) {
+    // support the 2nd arg for now (third part)
+    if (strcmp(cur->command[2], command_keyword) == 0) {
+      if (prev != NULL) {
+        prev->next = cur->next;
+      } else {
+        q->head = cur->next;
+      }
+
+      cur->next = NULL;
+      return cur;
+    }
+
+    prev = cur;
+    cur = cur->next;
+  }
+
+  return NULL;
 }
