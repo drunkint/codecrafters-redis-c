@@ -377,6 +377,14 @@ bool handle_exec(char* result, int fd_index) {
 		get_simple_error(result, "ERR", "EXEC without MULTI");
 		return false;
 	}
+
+	// start of executing multi
+	transac_states[fd_index] = false;
+
+	if (transac_q[fd_index]->head == NULL) {
+		get_resp_array_pointer(result, NULL, 0);
+		return true;
+	}
 }
 // command is a RESP array of bulk strings
 // RESP array are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
