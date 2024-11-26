@@ -349,11 +349,12 @@ bool handle_xrange(char* result, char* stream_key, char* id_start, char* id_end)
 }
 
 bool handle_incr(char* result, char* key) {
-	long long val = atoll(ht_get_value(ht, key)) + 1;
+	char* cur_val = ht_get_value(ht, key);
+	long long val = cur_val == NULL ? 1 : atoll(cur_val) + 1;
 	char val_str[256] = {0};
 	sprintf(val_str, "%lld", val);
 	ht_set(ht, key, val_str, TYPE_STRING, 0);
-	
+
 	get_integer(result, val);
 	return true;
 }
