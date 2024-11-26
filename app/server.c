@@ -22,6 +22,7 @@
 #define INITIAL_TABLE_SIZE 4
 #define pass (void)0
 #define TRANSACTION_LIMIT 20
+#define MAX_PORT_LENGTH 6
 
 
 // system wide variables
@@ -38,6 +39,8 @@ bool transac_states[MAX_NUM_FDS] = {false};
 
 char dir[MAX_ARGUMENT_LENGTH] = {0};
 char db_filename[MAX_ARGUMENT_LENGTH] = {0};
+
+int port = 6379;
 
 void run_all_in_queue_transaction(char* result, Queue* q);
 
@@ -68,6 +71,9 @@ bool handle_arguments(int argc, char* argv[]) {
 			} else if (strcmp(option_name, "dbfilename") == 0) {
 				i++;
 				strcpy(db_filename, argv[i]);
+			} else if (strcmp(option_name, "port") == 0) {
+				i++;
+				port = atoi(argv[i]);
 			}
 		}
 		// printf("argv[%d]: %s\n", i, argv[i]);
@@ -712,7 +718,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	struct sockaddr_in serv_addr = { .sin_family = AF_INET ,
-									 .sin_port = htons(6379),
+									 .sin_port = htons(port),
 									 .sin_addr = { htonl(INADDR_ANY) },
 									};
 	
@@ -728,7 +734,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	// start of event loop
-	printf("Waiting for clients to connect...\n");
+	printf("Port %d: Waiting for clients to connect...\n", port);
 	
 	// init first fd to be the server fd
 	fds[0].fd = server_fd;
