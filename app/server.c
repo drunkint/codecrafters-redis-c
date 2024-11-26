@@ -32,7 +32,7 @@ Queue* eq;																				// event queue: stores async events with timeout
 Queue* tq;																				// trigger queue: stores async events that will be triggered on some action.
 Queue* rq;																				// run queue: stores async events ready to be ran. Other queues will push their events here.
 
-Queue* transac_q[MAX_NUM_FDS];										// transaction queues: stores transactions for each fd client.
+Queue* transac_q[MAX_NUM_FDS] = {NULL};						// transaction queues: stores transactions for each fd client.
 bool transac_states[MAX_NUM_FDS] = {false};
 
 char dir[MAX_ARGUMENT_LENGTH] = {0};
@@ -385,7 +385,20 @@ bool handle_exec(char* result, int fd_index) {
 		get_resp_array_pointer(result, NULL, 0);
 		return true;
 	}
+
+	// run_all_in_queue(transac_q[fd_index]);
+
 }
+
+int count_decoded_command_arg_num(char decoded_command[][MAX_ARGUMENT_LENGTH]) {
+	for (int i = 0; i < MAX_NUM_ARGUMENTS; i++) {
+		if (strlen(decoded_command[i]) == 0) {
+			return i;
+		}
+	}
+	return MAX_NUM_ARGUMENTS;
+}
+
 // command is a RESP array of bulk strings
 // RESP array are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
 // bulk strings are encoded as: $<length>\r\n<data>\r\n
@@ -430,7 +443,7 @@ int parse_command_from_client(char decoded_command[][MAX_ARGUMENT_LENGTH], char*
 	}
 
 	printf("\n (received at %lu)\n", get_time_in_ms());
-
+	return 0;
 }
 
 int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH], int fd_index) {
@@ -521,6 +534,23 @@ void preprocess_blocking_command(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARG
 		free(latest_key);
 		return;
 	}
+}
+
+bool is_in_transac_state(int fd_index) {
+	printf("check transaction state: %d\n", transac_states[fd_index]);
+	return transac_states[fd_index];
+}
+
+bool add_command_to_transac_q(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH], int fd_index, int arg_num) {
+	q_add(transac_q[fd_index], decoded_command, arg_num, 0, fd_index);
+
+	// char temp[1][128] = {0};
+	// get_simple_string(temp[0], "QUEUED");
+
+	// get_resp_array(result, temp, 1);
+
+	get_simple_string(result, "QUEUED");
+	return true;
 }
 
 void handle_blocking_command(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH], int fd_index) {
@@ -705,7 +735,6 @@ int main(int argc, char *argv[]) {
 				// this is not blocking because fds[i].revents includes POLLIN in poll()
 				// this means there are data to read in the client fd
 				ssize_t read_length = read(fds[i].fd, buffer , BUFFER_SIZE);
-				
 				if (read_length <= 0) {
 					printf("Client disconnected\n");
 					close(fds[i].fd);
@@ -714,6 +743,14 @@ int main(int argc, char *argv[]) {
 				} else {
 					char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH] = {0};
 					parse_command_from_client(decoded_command, buffer);
+					// int command_items_num = parse_command_from_client(decoded_command, buffer);
+					// printf("command items: %d\n", command_items_num);
+
+					// printf("going to check...\n");
+					if (is_in_transac_state(i) && strcmp(decoded_command[0], "exec") != 0) {
+						add_command_to_transac_q(results[i], decoded_command, i, count_decoded_command_arg_num(decoded_command));
+						continue;
+					}
 
 					// printf("hey\n");
 					if (is_command_blocking(decoded_command)) {

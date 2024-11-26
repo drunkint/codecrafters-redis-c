@@ -7,6 +7,8 @@
 Queue* q_init() {
   Queue* q = calloc(1, sizeof(Queue));
   q->head = NULL;
+  
+  return q;
 }
 
 
@@ -36,7 +38,7 @@ void q_add(Queue* q, char decoded_command[][MAX_ARGUMENT_LENGTH], int num_of_arg
   // insert into queue such that the queue is sorted by expiry time in ascending order
   Event* cur = q->head;
   Event* prev = NULL;
-  while (cur != NULL && cur->expiry_time < e->expiry_time) {
+  while (cur != NULL && cur->expiry_time <= e->expiry_time) {
     prev = cur;
     cur = cur->next;
   }
@@ -77,6 +79,24 @@ void q_destroy_event(Event* e) {
   free(e->command);
   // printf("- freeing e\n");
   free(e);
+}
+
+void q_destroy_queue(Queue* q) {
+  if (q == NULL) {
+    return;
+  } else if (q->head == NULL) {
+    free(q);
+    return;
+  }
+
+  Event* cur = q->head;
+  while (cur != NULL) {
+    Event* next = cur->next;
+    q_destroy_event(cur);
+    cur = next;
+  }
+
+  free(q);
 }
 
 bool q_is_head_expired(Queue* q) {
