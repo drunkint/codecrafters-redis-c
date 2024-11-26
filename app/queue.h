@@ -17,6 +17,7 @@ typedef struct Queue {
 Queue* q_init();
 void q_add(Queue* q, char decoded_command[][MAX_ARGUMENT_LENGTH], int num_of_arg, unsigned long expiry_time, int fd_index);
 void q_destroy_event(Event* e);
+void q_destroy_queue(Queue* q);
 void q_prepend(Queue* q, Event* e);
 
 // used in event queue

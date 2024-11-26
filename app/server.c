@@ -21,6 +21,7 @@
 #define MAX_NUM_FDS 10
 #define INITIAL_TABLE_SIZE 4
 #define pass (void)0
+#define TRANSACTION_LIMIT 20
 
 
 // system wide variables
@@ -37,6 +38,8 @@ bool transac_states[MAX_NUM_FDS] = {false};
 
 char dir[MAX_ARGUMENT_LENGTH] = {0};
 char db_filename[MAX_ARGUMENT_LENGTH] = {0};
+
+void run_all_in_queue_transaction(char* result, Queue* q);
 
 
 bool add_to_fds(int fd) {
@@ -386,7 +389,7 @@ bool handle_exec(char* result, int fd_index) {
 		return true;
 	}
 
-	// run_all_in_queue(transac_q[fd_index]);
+	run_all_in_queue_transaction(result, transac_q[fd_index]);
 
 }
 
@@ -599,7 +602,7 @@ void check_event_queue() {
 	}
 }
 
-void run_all_in_queue(Queue* q) {
+void run_all_in_queue_silently(Queue* q) {
 	Event* e;
 	while (e = q_pop_front(q)) {
 		if (e == NULL) {
@@ -618,6 +621,30 @@ void run_all_in_queue(Queue* q) {
 		
 		q_destroy_event(e);
 	}
+}
+
+void run_all_in_queue_transaction(char* result, Queue* q) {
+	char responses[TRANSACTION_LIMIT][MAX_ARGUMENT_LENGTH] = {0};
+	int response_index = 0;
+	Event* e;
+	while (e = q_pop_front(q)) {
+		if (e == NULL) {
+			break;
+		}
+
+		// bad implementation but put here for now.
+		char temp[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH] = {0};
+		for (int i = 0; i < e->command_length; i++) {
+			strcpy(temp[i], e->command[i]);
+			printf("copied over: %s\n", temp[i]);
+		}
+		// printf("-> handling %s at %lu\n", temp[0], get_time_in_ms());
+		handle_command(responses[response_index++], temp, e->fd_index);
+		q_destroy_event(e);
+	}
+
+	get_resp_array(result, responses, response_index);
+
 }
 
 int main(int argc, char *argv[]) {
@@ -703,7 +730,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		check_event_queue();
-		run_all_in_queue(rq);
+		run_all_in_queue_silently(rq);
 		if (num_of_fds_with_event == 0) {
 			continue;
 		}
@@ -740,6 +767,11 @@ int main(int argc, char *argv[]) {
 					close(fds[i].fd);
 					fds[i].fd = -1; 
 					memset(results[i], '\0', BUFFER_SIZE);
+
+					// clear transaction if client disconnected.
+					q_destroy_queue(transac_q[i]);
+					transac_states[i] = false;						
+					
 				} else {
 					char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH] = {0};
 					parse_command_from_client(decoded_command, buffer);
