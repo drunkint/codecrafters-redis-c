@@ -87,3 +87,7 @@ void get_resp_array_pointer(char* dest, char** src, int number_of_elements) {
 void get_simple_error(char* dest, char* prefix, char* msg) {
 	sprintf(dest, "-%s %s\r\n", prefix, msg);
 }
+
+void get_integer(char* dest, long long int src) {
+	sprintf(dest, ":%lld\r\n", src);
+}

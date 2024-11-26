@@ -348,6 +348,16 @@ bool handle_xrange(char* result, char* stream_key, char* id_start, char* id_end)
 	
 }
 
+bool handle_incr(char* result, char* key) {
+	long long val = atoll(ht_get_value(ht, key)) + 1;
+	char val_str[256] = {0};
+	sprintf(val_str, "%lld", val);
+	ht_set(ht, key, val_str, TYPE_STRING, 0);
+	
+	get_integer(result, val);
+	return true;
+}
+
 // command is a RESP array of bulk strings
 // RESP array are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
 // bulk strings are encoded as: $<length>\r\n<data>\r\n
@@ -437,6 +447,9 @@ int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARG
 		return 0;
 	} else if (strcmp(decoded_command[0], "xread") == 0) {
 		handle_xread(result, &decoded_command[1]);		// skipps "xread" itself
+		return 0;
+	} else if (strcmp(decoded_command[0], "incr") == 0) {
+		handle_incr(result, decoded_command[1]);		// skipps "xread" itself
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
