@@ -4,10 +4,12 @@
 #include "queue.h"
 #include "timer.h"
 
+#define pass (void)0
+
 Queue* q_init() {
   Queue* q = calloc(1, sizeof(Queue));
   q->head = NULL;
-  
+
   return q;
 }
 
@@ -81,23 +83,23 @@ void q_destroy_event(Event* e) {
   free(e);
 }
 
-void q_destroy_queue(Queue* q) {
-  if (q == NULL) {
-    return;
-  } else if (q->head == NULL) {
-    free(q);
+void q_destroy_queue_without_freeing_q(Queue* q) {
+  if (q == NULL || q->head == NULL) {
     return;
   }
-
   Event* cur = q->head;
   while (cur != NULL) {
     Event* next = cur->next;
     q_destroy_event(cur);
     cur = next;
   }
-
-  free(q);
 }
+
+void q_destroy_queue(Queue* q) {
+  q_destroy_queue_without_freeing_q(q);
+  q == NULL ? pass : free(q);
+}
+
 
 bool q_is_head_expired(Queue* q) {
   if (q == NULL || q->head == NULL) {

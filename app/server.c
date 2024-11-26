@@ -53,6 +53,10 @@ bool add_to_fds(int fd) {
 	return false;
 }
 
+bool is_transactable_command(char* cmd) {
+	return strcmp(cmd, "exec") != 0 && strcmp(cmd, "discard") != 0;
+}
+
 bool handle_arguments(int argc, char* argv[]) {
 	for (int i = 0; i < argc; i++) {
 		if (strncmp(argv[i], "--", 2) == 0) {
@@ -376,7 +380,7 @@ bool handle_multi(char* result, int fd_index) {
 }
 
 bool handle_exec(char* result, int fd_index) {
-	if (transac_states[fd_index] == false) {
+	if (!transac_states[fd_index]) {
 		get_simple_error(result, "ERR", "EXEC without MULTI");
 		return false;
 	}
@@ -391,6 +395,19 @@ bool handle_exec(char* result, int fd_index) {
 
 	run_all_in_queue_transaction(result, transac_q[fd_index]);
 
+}
+
+bool handle_discard(char* result, int fd_index) {
+	if (!transac_states[fd_index]) {
+		get_simple_error(result, "ERR", "DISCARD without MULTI");
+		return false;
+	}
+
+	// start of executing discard
+	transac_states[fd_index] = false;
+	q_destroy_queue_without_freeing_q(transac_q[fd_index]);
+	get_simple_string(result, "OK");
+	return true;
 }
 
 int count_decoded_command_arg_num(char decoded_command[][MAX_ARGUMENT_LENGTH]) {
@@ -501,6 +518,9 @@ int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARG
 	} else if (strcmp(decoded_command[0], "exec") == 0) {
 		handle_exec(result, fd_index);
 		return 0;
+	} else if (strcmp(decoded_command[0], "discard") == 0) {
+		handle_discard(result, fd_index);
+		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
 		return 0;
@@ -540,7 +560,7 @@ void preprocess_blocking_command(char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARG
 }
 
 bool is_in_transac_state(int fd_index) {
-	printf("check transaction state: %d\n", transac_states[fd_index]);
+	// printf("check transaction state: %d\n", transac_states[fd_index]);
 	return transac_states[fd_index];
 }
 
@@ -769,7 +789,7 @@ int main(int argc, char *argv[]) {
 					memset(results[i], '\0', BUFFER_SIZE);
 
 					// clear transaction if client disconnected.
-					q_destroy_queue(transac_q[i]);
+					q_destroy_queue_without_freeing_q(transac_q[i]);
 					transac_states[i] = false;						
 					
 				} else {
@@ -779,7 +799,7 @@ int main(int argc, char *argv[]) {
 					// printf("command items: %d\n", command_items_num);
 
 					// printf("going to check...\n");
-					if (is_in_transac_state(i) && strcmp(decoded_command[0], "exec") != 0) {
+					if (is_in_transac_state(i) && is_transactable_command(decoded_command[0])) {
 						add_command_to_transac_q(results[i], decoded_command, i, count_decoded_command_arg_num(decoded_command));
 						continue;
 					}
