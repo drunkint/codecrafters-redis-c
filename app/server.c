@@ -32,6 +32,8 @@ Queue* eq;																				// event queue: stores async events with timeout
 Queue* tq;																				// trigger queue: stores async events that will be triggered on some action.
 Queue* rq;																				// run queue: stores async events ready to be ran. Other queues will push their events here.
 
+Queue* transac_q[MAX_NUM_FDS];										// transaction queues: stores transactions for each fd client.
+
 char dir[MAX_ARGUMENT_LENGTH] = {0};
 char db_filename[MAX_ARGUMENT_LENGTH] = {0};
 
@@ -354,7 +356,7 @@ bool handle_incr(char* result, char* key) {
 		get_simple_error(result, "ERR", "value is not an integer or out of range");
 		return false;
 	}
-	
+
 	long long val = cur_val == NULL ? 1 : atoll(cur_val) + 1;
 	char val_str[256] = {0};
 	sprintf(val_str, "%lld", val);
@@ -362,6 +364,11 @@ bool handle_incr(char* result, char* key) {
 
 	get_integer(result, val);
 	return true;
+}
+
+bool handle_multi(char* result) {
+
+	get_simple_string(result, "OK");
 }
 
 // command is a RESP array of bulk strings
@@ -455,7 +462,10 @@ int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARG
 		handle_xread(result, &decoded_command[1]);		// skipps "xread" itself
 		return 0;
 	} else if (strcmp(decoded_command[0], "incr") == 0) {
-		handle_incr(result, decoded_command[1]);		// skipps "xread" itself
+		handle_incr(result, decoded_command[1]);		
+		return 0;
+	} else if (strcmp(decoded_command[0], "multi") == 0) {
+		handle_multi(result);
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
@@ -574,6 +584,9 @@ int main(int argc, char *argv[]) {
 	eq = q_init();
 	tq = q_init();
 	rq = q_init();
+	for (int i = 0; i < MAX_NUM_FDS; i++) {
+		transac_q[i] = q_init();
+	}
 
 	// create database (hashtable)
 	ht = ht_create_table(INITIAL_TABLE_SIZE);
