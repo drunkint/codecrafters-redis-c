@@ -46,6 +46,8 @@ char db_filename[MAX_ARGUMENT_LENGTH] = {0};
 int port = DEFAULT_PORT;
 char master_host[MAX_ARGUMENT_LENGTH] = {0};			// empty when master, non-empty when slave
 int master_port = 0;															// empty when master, non-empty when slave
+static const char master_replid[] = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";			// every master has one
+int master_repl_offset = 0;
 
 void run_all_in_queue_transaction(char* result, Queue* q);
 
@@ -428,12 +430,16 @@ bool handle_discard(char* result, int fd_index) {
 }
 
 bool handle_info(char* result) {
-	if (master_port == 0) {
-		get_bulk_string(result, "role:master");
-		return true;
-	} 
+	char info[MAX_ARGUMENT_LENGTH] = {0};
+	sprintf(info, "role:%s\r\n"
+		"master_replid:%s\r\n"
+		"master_repl_offset:%d",
+		master_port == 0 ? "master" : "slave",
+		master_replid,
+		master_repl_offset
+	);
 
-	get_bulk_string(result, "role:slave");
+	get_bulk_string(result, info);
 	return true;
 }
 
