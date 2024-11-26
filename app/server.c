@@ -23,6 +23,7 @@
 #define pass (void)0
 #define TRANSACTION_LIMIT 20
 #define MAX_PORT_LENGTH 6
+#define DEFAULT_PORT 6379
 
 
 // system wide variables
@@ -40,7 +41,7 @@ bool transac_states[MAX_NUM_FDS] = {false};
 char dir[MAX_ARGUMENT_LENGTH] = {0};
 char db_filename[MAX_ARGUMENT_LENGTH] = {0};
 
-int port = 6379;
+int port = DEFAULT_PORT;
 
 void run_all_in_queue_transaction(char* result, Queue* q);
 
@@ -416,6 +417,16 @@ bool handle_discard(char* result, int fd_index) {
 	return true;
 }
 
+bool handle_info(char* result) {
+	if (port == DEFAULT_PORT) {
+		get_bulk_string(result, "role:master");
+		return true;
+	} 
+
+	get_bulk_string(result, "role:slave");
+	return true;
+}
+
 int count_decoded_command_arg_num(char decoded_command[][MAX_ARGUMENT_LENGTH]) {
 	for (int i = 0; i < MAX_NUM_ARGUMENTS; i++) {
 		if (strlen(decoded_command[i]) == 0) {
@@ -526,6 +537,9 @@ int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARG
 		return 0;
 	} else if (strcmp(decoded_command[0], "discard") == 0) {
 		handle_discard(result, fd_index);
+		return 0;
+	} else if (strcmp(decoded_command[0], "info") == 0) {
+		handle_info(result);
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
