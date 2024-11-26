@@ -33,6 +33,7 @@ Queue* tq;																				// trigger queue: stores async events that will be
 Queue* rq;																				// run queue: stores async events ready to be ran. Other queues will push their events here.
 
 Queue* transac_q[MAX_NUM_FDS];										// transaction queues: stores transactions for each fd client.
+bool transac_states[MAX_NUM_FDS] = {false};
 
 char dir[MAX_ARGUMENT_LENGTH] = {0};
 char db_filename[MAX_ARGUMENT_LENGTH] = {0};
@@ -366,11 +367,17 @@ bool handle_incr(char* result, char* key) {
 	return true;
 }
 
-bool handle_multi(char* result) {
-
+bool handle_multi(char* result, int fd_index) {
+	transac_states[fd_index] = true;
 	get_simple_string(result, "OK");
 }
 
+bool handle_exec(char* result, int fd_index) {
+	if (transac_states[fd_index] == false) {
+		get_simple_error(result, "ERR", "EXEC without MULTI");
+		return false;
+	}
+}
 // command is a RESP array of bulk strings
 // RESP array are encoded as: *<number-of-elements>\r\n<element-1>...<element-n>
 // bulk strings are encoded as: $<length>\r\n<data>\r\n
@@ -418,7 +425,7 @@ int parse_command_from_client(char decoded_command[][MAX_ARGUMENT_LENGTH], char*
 
 }
 
-int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH]) {
+int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARGUMENT_LENGTH], int fd_index) {
 		// printf("-> handling %s at %lu\n", decoded_command[0], get_time_in_ms());
 
 	// printf("decoded_command[0]: %s\n", decoded_command[0]);
@@ -465,7 +472,10 @@ int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARG
 		handle_incr(result, decoded_command[1]);		
 		return 0;
 	} else if (strcmp(decoded_command[0], "multi") == 0) {
-		handle_multi(result);
+		handle_multi(result, fd_index);
+		return 0;
+	} else if (strcmp(decoded_command[0], "exec") == 0) {
+		handle_exec(result, fd_index);
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
@@ -565,7 +575,7 @@ void run_all_in_queue(Queue* q) {
 			printf("copied over: %s\n", temp[i]);
 		}
 		// printf("-> handling %s at %lu\n", temp[0], get_time_in_ms());
-		handle_command(results[e->fd_index], temp);
+		handle_command(results[e->fd_index], temp, e->fd_index);
 		fds[e->fd_index].events |= POLLOUT; 
 		
 		q_destroy_event(e);
@@ -703,7 +713,7 @@ int main(int argc, char *argv[]) {
 						continue;
 					}
 
-					handle_command(results[i], decoded_command);
+					handle_command(results[i], decoded_command, i);
 					// strcpy(results[i], result);
 					fds[i].events |= POLLOUT; 
 				}
