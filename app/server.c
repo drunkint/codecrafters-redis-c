@@ -38,10 +38,14 @@ Queue* rq;																				// run queue: stores async events ready to be ran.
 Queue* transac_q[MAX_NUM_FDS] = {NULL};						// transaction queues: stores transactions for each fd client.
 bool transac_states[MAX_NUM_FDS] = {false};
 
+// RDB persistence
 char dir[MAX_ARGUMENT_LENGTH] = {0};
 char db_filename[MAX_ARGUMENT_LENGTH] = {0};
 
+// replication
 int port = DEFAULT_PORT;
+char master_host[MAX_ARGUMENT_LENGTH] = {0};			// empty when master, non-empty when slave
+int master_port = 0;															// empty when master, non-empty when slave
 
 void run_all_in_queue_transaction(char* result, Queue* q);
 
@@ -75,6 +79,12 @@ bool handle_arguments(int argc, char* argv[]) {
 			} else if (strcmp(option_name, "port") == 0) {
 				i++;
 				port = atoi(argv[i]);
+			} else if (strcmp(option_name, "replicaof") == 0) {
+				i++;
+				char* space_addr = strchr(argv[i], ' ');
+				master_port = atoi(space_addr + 1);
+				*space_addr = '\0';
+				strcpy(master_host, argv[i]);
 			}
 		}
 		// printf("argv[%d]: %s\n", i, argv[i]);
@@ -418,7 +428,7 @@ bool handle_discard(char* result, int fd_index) {
 }
 
 bool handle_info(char* result) {
-	if (port == DEFAULT_PORT) {
+	if (master_port == 0) {
 		get_bulk_string(result, "role:master");
 		return true;
 	} 
