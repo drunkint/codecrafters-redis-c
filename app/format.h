@@ -5,6 +5,7 @@
 
 
 bool is_digit(char character);
+bool is_number(char* str);
 void modify_to_lower(char* str);
 void get_bulk_string(char* dest, char* src);
 void get_simple_string(char* dest, char* src);

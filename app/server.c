@@ -350,6 +350,11 @@ bool handle_xrange(char* result, char* stream_key, char* id_start, char* id_end)
 
 bool handle_incr(char* result, char* key) {
 	char* cur_val = ht_get_value(ht, key);
+	if (cur_val != NULL && !is_number(cur_val)) {
+		get_simple_error(result, "ERR", "value is not an integer or out of range");
+		return false;
+	}
+	
 	long long val = cur_val == NULL ? 1 : atoll(cur_val) + 1;
 	char val_str[256] = {0};
 	sprintf(val_str, "%lld", val);

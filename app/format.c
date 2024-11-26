@@ -9,6 +9,15 @@ bool is_digit(char character) {
 	return '0' <= character && character <= '9';
 }
 
+bool is_number(char* str) {
+	for (int i = 0; i < strlen(str); i++) {
+		if (!is_digit(str[i])) {
+			return false;
+		}
+	}
+	return true;
+}
+
 void modify_to_lower(char* str) {
 	for(int i = 0; i < strlen(str); i++){
 		str[i] = tolower(str[i]);
