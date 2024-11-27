@@ -444,6 +444,20 @@ bool handle_info(char* result) {
 	return true;
 }
 
+bool handle_psync(char* result, char* repl_id, char* repl_offset) {
+	if (!(repl_id != NULL && strlen(repl_id) == 1 && repl_id[0] == '?' 
+			&& repl_offset != NULL && strlen(repl_offset) == 2 && strcmp(repl_offset, "-1") == 0)) {
+		get_simple_error(result, "ERR", "not implemented");
+		return false;
+	}
+
+	char temp[MAX_ARGUMENT_LENGTH] = {0};
+	sprintf(temp, "FULLRESYNC %s 0", master_replid);
+
+	get_simple_string(result, temp);
+	return true;
+}
+
 int count_decoded_command_arg_num(char decoded_command[][MAX_ARGUMENT_LENGTH]) {
 	for (int i = 0; i < MAX_NUM_ARGUMENTS; i++) {
 		if (strlen(decoded_command[i]) == 0) {
@@ -561,6 +575,9 @@ int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARG
 	} else if (strcmp(decoded_command[0], "replconf") == 0) {
 		get_simple_string(result, "OK");
 		// handle_replconf(result);
+		return 0;
+	} else if (strcmp(decoded_command[0], "psync") == 0) {
+		handle_psync(result, decoded_command[1], decoded_command[2]);
 		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
