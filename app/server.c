@@ -558,6 +558,10 @@ int handle_command(char* result, char decoded_command[MAX_NUM_ARGUMENTS][MAX_ARG
 	} else if (strcmp(decoded_command[0], "info") == 0) {
 		handle_info(result);
 		return 0;
+	} else if (strcmp(decoded_command[0], "replconf") == 0) {
+		get_simple_string(result, "OK");
+		// handle_replconf(result);
+		return 0;
 	} else {
 		strcpy(result, "+NotImplemented\r\n");
 		return 0;
