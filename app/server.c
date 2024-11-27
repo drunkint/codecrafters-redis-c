@@ -778,6 +778,7 @@ int main(int argc, char *argv[]) {
 
 		send_ping(&fds[1]);
 		send_replconf_step(&fds[1], port);
+		send_psync_step(&fds[1]);
 	}
 
 	// init the remaining fds (these will be filled with client fds later) 

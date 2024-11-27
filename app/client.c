@@ -53,6 +53,11 @@ void send_replconf_step(struct pollfd* fd, int slave_port) {
   return;
 }
 
+int send_psync_step(struct pollfd* fd) {
+  const char* psync = "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n";
+  return send_cmd(fd, psync);
+}
+
 // on success return master fd, 1 o/w
 int connect_to_master(char* master_host, int master_port) {
   int master_fd = socket(AF_INET, SOCK_STREAM, 0);
