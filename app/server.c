@@ -16,6 +16,7 @@
 #include "format.h"
 // #include "radix-trie.h"
 #include "queue.h"
+#include "client.h"
 
 #define MAX_NUM_ARGUMENTS 8
 #define MAX_NUM_FDS 10
@@ -28,7 +29,7 @@
 
 // system wide variables
 HashTable* ht;																		// stores (key, value) and expiry date
-struct pollfd fds[MAX_NUM_FDS];										// list of fds we can use.
+struct pollfd fds[MAX_NUM_FDS];										// list of fds we can use. 0 is reserved for server fd, 1 is reserved for master fd.
 char results[MAX_NUM_FDS][BUFFER_SIZE];						// for storing results to pass back to fds.
 
 Queue* eq;																				// event queue: stores async events with timeout
@@ -53,7 +54,7 @@ void run_all_in_queue_transaction(char* result, Queue* q);
 
 
 bool add_to_fds(int fd) {
-	for (int i = 1; i < MAX_NUM_FDS; i++) {
+	for (int i = 2; i < MAX_NUM_FDS; i++) {
 		if (fds[i].fd == -1) {
 			fds[i].fd = fd;
 			fds[i].events = POLLIN;
@@ -770,8 +771,16 @@ int main(int argc, char *argv[]) {
 	fds[0].fd = server_fd;
 	fds[0].events = POLLIN;
 
+	// connect master  redis server if it's there
+	if (strlen(master_host) > 0 || master_port > 0) {
+		fds[1].fd = connect_to_master(master_host, master_port);
+		fds[1].events = POLLOUT;
+
+		send_ping(&fds[1]);
+	}
+
 	// init the remaining fds (these will be filled with client fds later) 
-	for (int i = 1; i < MAX_NUM_FDS; i++) {
+	for (int i = 2; i < MAX_NUM_FDS; i++) {
 		fds[i].fd = -1;
 	}
 
@@ -806,7 +815,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		// handle each client
-		for (int i = 1; i < MAX_NUM_FDS; i++) {
+		for (int i = 2; i < MAX_NUM_FDS; i++) {
 			// if POLLIN is included in fds[i].revents (& is bitwise and)
 			// Note: fds[i].revents is populated by poll()
 			if (fds[i].fd != -1 && (fds[i].revents & POLLIN)) { 
