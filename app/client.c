@@ -15,27 +15,42 @@
 #include "format.h"
 #include "client.h"
 
-
-int send_ping(struct pollfd* fd) {
-  const char *ping = "*1\r\n$4\r\nPING\r\n";
-  printf("start to send ping %d %d\n", fd->fd, fd->revents);
+int send_cmd(struct pollfd* fd, const char* coded_cmd) {
   if (fd->fd == -1) {
     return 0;
   }
   
-  printf("preparing to send ping\n");
-
-  ssize_t bytes_sent = write(fd->fd, ping, strlen(ping));
+  fd->events = POLLOUT;
+  ssize_t bytes_sent = write(fd->fd, coded_cmd, strlen(coded_cmd));
   if (bytes_sent < 0) {
-      printf("Failed to send PING to master: %s\n", strerror(errno));
+      printf("Failed to send cmd to master: %s\n", strerror(errno));
       close(fd->fd);
       fd->fd = -1;
   } else {
-      printf("PING sent to master\n");
+      printf("sent to master\n", coded_cmd);
       fd->events = POLLIN; // Now wait for a response
+      char buffer[BUFFER_SIZE] = {0};
+      read(fd->fd, buffer, BUFFER_SIZE);
+      printf("received: %s\n", buffer);
   }
+}
+
+int send_ping(struct pollfd* fd) {
+  const char* ping = "*1\r\n$4\r\nPING\r\n";
+  // printf("start to send ping %d %d\n", fd->fd, fd->revents);
   
-  return bytes_sent;
+  return send_cmd(fd, ping);
+}
+
+void send_replconf_step(struct pollfd* fd, int slave_port) {
+  char cmd_port[MAX_ARGUMENT_LENGTH] = {0};
+  sprintf(cmd_port, "*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n%d\r\n", slave_port);
+  send_cmd(fd, cmd_port);
+
+  const char* cmd_capa = "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n";
+  send_cmd(fd, cmd_capa);
+
+  return;
 }
 
 // on success return master fd, 1 o/w

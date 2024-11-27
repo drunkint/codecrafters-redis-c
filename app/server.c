@@ -777,6 +777,7 @@ int main(int argc, char *argv[]) {
 		fds[1].events = POLLOUT;
 
 		send_ping(&fds[1]);
+		send_replconf_step(&fds[1], port);
 	}
 
 	// init the remaining fds (these will be filled with client fds later) 
